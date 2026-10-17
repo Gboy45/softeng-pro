@@ -1,0 +1,6 @@
+{
+  "name": "Retail Mobile Inventory Scanner",
+  "description": "Mobile inventory app for retail businesses with real-time cloud database sync, barcode camera scanner, and smart stock replenishment popups.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
