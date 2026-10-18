@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { BottleLogo } from './BottleLogo.js';
 import { useInventory } from '../context/InventoryContext.js';
-import { Shield, User, Lock, ArrowRight, AlertCircle, Sparkles } from 'lucide-react';
+import { User, Lock, ArrowRight, AlertCircle } from 'lucide-react';
 
 export const LoginScreen: React.FC = () => {
   const { login } = useInventory();
@@ -16,15 +16,6 @@ export const LoginScreen: React.FC = () => {
       setError(res.error || 'Invalid credentials');
     } else {
       setError(null);
-    }
-  };
-
-  const handleQuickLogin = (u: string, p: string) => {
-    setUsername(u);
-    setPassword(p);
-    const res = login(u, p);
-    if (!res.success) {
-      setError(res.error || 'Invalid credentials');
     }
   };
 
@@ -53,8 +44,8 @@ export const LoginScreen: React.FC = () => {
                   setUsername(e.target.value);
                   setError(null);
                 }}
-                placeholder="ferdie or charlene"
-                className="w-full pl-9 pr-3 py-2 bg-[#faf8f4] border border-[#e7e2d4] rounded-xl text-sm text-[#242119] focus:outline-none focus:ring-2 focus:ring-[#9c8f6f]"
+                placeholder="Username"
+                className="w-full pl-9 pr-3 py-2.5 bg-[#faf8f4] border border-[#e7e2d4] rounded-xl text-sm text-[#242119] focus:outline-none focus:ring-2 focus:ring-[#9c8f6f]"
               />
             </div>
           </div>
@@ -73,8 +64,8 @@ export const LoginScreen: React.FC = () => {
                   setPassword(e.target.value);
                   setError(null);
                 }}
-                placeholder="••••••"
-                className="w-full pl-9 pr-3 py-2 bg-[#faf8f4] border border-[#e7e2d4] rounded-xl text-sm font-mono text-[#242119] focus:outline-none focus:ring-2 focus:ring-[#9c8f6f]"
+                placeholder="Password"
+                className="w-full pl-9 pr-3 py-2.5 bg-[#faf8f4] border border-[#e7e2d4] rounded-xl text-sm font-mono text-[#242119] focus:outline-none focus:ring-2 focus:ring-[#9c8f6f]"
               />
             </div>
           </div>
@@ -94,37 +85,6 @@ export const LoginScreen: React.FC = () => {
             <ArrowRight className="w-4 h-4 text-[#9c8f6f]" />
           </button>
         </form>
-
-        {/* Quick Credentials Helper for Mobile App Users */}
-        <div className="pt-4 border-t border-[#f0ece0] space-y-2.5 text-center">
-          <span className="text-[11px] font-semibold text-[#8c8878] uppercase tracking-wider block">
-            Select Role to Quick Sign-In
-          </span>
-
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => handleQuickLogin('ferdie', '123')}
-              className="p-2.5 rounded-xl border border-[#9c8f6f] bg-[#efeadc] hover:bg-[#e7e2d4] text-left transition-colors"
-            >
-              <div className="flex items-center gap-1.5 text-xs font-bold text-[#242119]">
-                <Shield className="w-3.5 h-3.5 text-[#7c7156]" /> Admin
-              </div>
-              <div className="text-[11px] font-mono text-[#7c7156] mt-0.5">ferdie / 123</div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleQuickLogin('charlene', '123')}
-              className="p-2.5 rounded-xl border border-[#e7e2d4] bg-[#faf8f4] hover:bg-[#f2efe6] text-left transition-colors"
-            >
-              <div className="flex items-center gap-1.5 text-xs font-bold text-[#242119]">
-                <User className="w-3.5 h-3.5 text-[#8c8878]" /> Personnel
-              </div>
-              <div className="text-[11px] font-mono text-[#8c8878] mt-0.5">charlene / 123</div>
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   );

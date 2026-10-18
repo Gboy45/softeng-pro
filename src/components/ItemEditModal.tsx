@@ -87,9 +87,9 @@ export const ItemEditModal: React.FC = () => {
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn overflow-y-auto"
     >
-      <div className="w-full max-w-md bg-white rounded-2xl border border-[#e7e2d4] shadow-2xl overflow-hidden my-auto">
+      <div className="w-full max-w-md bg-white rounded-2xl border border-[#e7e2d4] shadow-2xl overflow-hidden my-auto animate-scaleUp">
         <div className="flex items-center justify-between px-5 py-4 border-b border-[#e7e2d4] bg-[#faf8f4]">
           <h3 className="font-serif text-lg font-bold text-[#242119]">Edit Item Details</h3>
           <button
@@ -219,7 +219,7 @@ export const ItemEditModal: React.FC = () => {
             />
             {!isAdmin && (
               <p className="text-[11px] text-[#8c8878] mt-1">
-                Barcode editing is restricted to the administrator account (ferdie).
+                Barcode editing is restricted to administrator accounts.
               </p>
             )}
           </div>

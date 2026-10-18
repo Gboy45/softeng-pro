@@ -1,14 +1,42 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import type { InventoryItem, Sale, Personnel, ActiveTab, UserAccount, UserRole } from '../types/inventory.js';
 
-const STORAGE_ITEMS_KEY = 'retail_inventory_items_v2';
-const STORAGE_SALES_KEY = 'retail_inventory_sales_v2';
-const STORAGE_PIN_KEY = 'retail_inventory_pin_v2';
-const STORAGE_AUTH_KEY = 'retail_inventory_auth_v2';
+const STORAGE_ITEMS_KEY = 'aura_parfums_items_v3';
+const STORAGE_SALES_KEY = 'aura_parfums_sales_v3';
+const STORAGE_PIN_KEY = 'aura_parfums_pin_v3';
+const STORAGE_AUTH_KEY = 'aura_parfums_auth_v3';
+const STORAGE_CURRENCY_KEY = 'aura_parfums_currency_v3';
 
+// Initial 8 Boutique Fragrances from screenshots (87 bottles total, $7,269.85 retail valuation)
 const SEED_ITEMS: InventoryItem[] = [
   {
     id: 'item-1',
+    name: 'Ariana Grande Cloud',
+    brand: 'Ariana Grande',
+    type: 'Eau de Parfum',
+    gender: 'For Women',
+    size: 100,
+    stock: 10,
+    price: 48.0,
+    location: 'Shelf C - Row 2',
+    barcode: '8122560223450',
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: 'item-2',
+    name: 'Bleu de Chanel',
+    brand: 'Chanel',
+    type: 'Eau de Parfum',
+    gender: 'For Men',
+    size: 150,
+    stock: 4, // Low Stock (4 left)
+    price: 120.0,
+    location: 'Shelf A - Row 4',
+    barcode: '3145891267229',
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: 'item-3',
     name: 'Chanel Chance',
     brand: 'Chanel',
     type: 'Eau de Parfum',
@@ -21,7 +49,7 @@ const SEED_ITEMS: InventoryItem[] = [
     updatedAt: new Date().toISOString(),
   },
   {
-    id: 'item-2',
+    id: 'item-4',
     name: 'Dior Sauvage',
     brand: 'Dior',
     type: 'Eau de Toilette',
@@ -34,42 +62,16 @@ const SEED_ITEMS: InventoryItem[] = [
     updatedAt: new Date().toISOString(),
   },
   {
-    id: 'item-3',
-    name: 'Versace Dylan Blue',
-    brand: 'Versace',
+    id: 'item-5',
+    name: 'Paco Rabanne One Million',
+    brand: 'Paco Rabanne',
     type: 'Eau de Toilette',
     gender: 'For Men',
     size: 100,
-    stock: 18,
-    price: 92.0,
-    location: 'Shelf B - Row 1',
-    barcode: '8011003835521',
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'item-4',
-    name: 'YSL Libre',
-    brand: 'YSL',
-    type: 'Eau de Parfum',
-    gender: 'For Women',
-    size: 90,
-    stock: 12,
-    price: 65.0,
-    location: 'Shelf B - Row 2',
-    barcode: '3614272562481',
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'item-5',
-    name: 'Bleu de Chanel',
-    brand: 'Chanel',
-    type: 'Eau de Parfum',
-    gender: 'For Men',
-    size: 150,
-    stock: 8,
-    price: 120.0,
-    location: 'Shelf A - Row 4',
-    barcode: '3145891267229',
+    stock: 2, // Low Stock (2 left)
+    price: 82.0,
+    location: 'Shelf C - Row 3',
+    barcode: '3349668529513',
     updatedAt: new Date().toISOString(),
   },
   {
@@ -87,36 +89,45 @@ const SEED_ITEMS: InventoryItem[] = [
   },
   {
     id: 'item-7',
-    name: 'Ariana Grande Cloud',
-    brand: 'Ariana Grande',
-    type: 'Eau de Parfum',
-    gender: 'For Women',
+    name: 'Versace Dylan Blue',
+    brand: 'Versace',
+    type: 'Eau de Toilette',
+    gender: 'For Men',
     size: 100,
-    stock: 10,
-    price: 48.0,
-    location: 'Shelf C - Row 2',
-    barcode: '8122560223450',
+    stock: 18,
+    price: 92.0,
+    location: 'Shelf B - Row 1',
+    barcode: '8011003835521',
     updatedAt: new Date().toISOString(),
   },
   {
     id: 'item-8',
-    name: 'Paco Rabanne One Million',
-    brand: 'Paco Rabanne',
-    type: 'Eau de Toilette',
-    gender: 'For Men',
-    size: 100,
-    stock: 9,
-    price: 82.0,
-    location: 'Shelf C - Row 3',
-    barcode: '3349668529513',
+    name: 'YSL Libre',
+    brand: 'YSL',
+    type: 'Eau de Parfum',
+    gender: 'For Women',
+    size: 90,
+    stock: 12,
+    price: 65.0,
+    location: 'Shelf B - Row 2',
+    barcode: '3614272562481',
     updatedAt: new Date().toISOString(),
   },
 ];
 
+const getIsoDateAgo = (daysAgo: number) => {
+  const d = new Date(Date.now() - daysAgo * 86400000);
+  return d.toISOString().slice(0, 10);
+};
+
+// Initial Boutique Sales Ledger Records (dynamic dates for Today, Weekly, Monthly, Quarterly, All Time)
 const SEED_SALES: Sale[] = [
-  { id: 'sale-1', name: 'Walk-in Customer', date: new Date().toISOString().slice(0, 10), amount: 89.99, note: 'Chanel Chance' },
-  { id: 'sale-2', name: 'Walk-in Customer', date: new Date().toISOString().slice(0, 10), amount: 74.5, note: 'Dior Sauvage' },
-  { id: 'sale-3', name: 'Maria Santos', date: new Date(Date.now() - 86400000).toISOString().slice(0, 10), amount: 120.0, note: 'Bleu de Chanel' },
+  { id: 'sale-1', name: 'Walk-in Customer', date: getIsoDateAgo(0), amount: 89.99, note: 'Chanel Chance' },
+  { id: 'sale-2', name: 'Walk-in Customer', date: getIsoDateAgo(0), amount: 74.5, note: 'Dior Sauvage' },
+  { id: 'sale-3', name: 'Maria Santos', date: getIsoDateAgo(2), amount: 120.0, note: 'Bleu de Chanel' },
+  { id: 'sale-4', name: 'Walk-in Customer', date: getIsoDateAgo(5), amount: 65.0, note: 'YSL Libre' },
+  { id: 'sale-5', name: 'Jon Reyes', date: getIsoDateAgo(14), amount: 92.0, note: 'Versace Dylan Blue' },
+  { id: 'sale-6', name: 'Elena Gomez', date: getIsoDateAgo(40), amount: 145.0, note: 'Tom Ford Oud Wood' },
 ];
 
 export interface InventoryContextType {
@@ -132,13 +143,22 @@ export interface InventoryContextType {
   setActiveTab: (tab: ActiveTab) => void;
   isScannerOpen: boolean;
   setIsScannerOpen: (open: boolean) => void;
+  isAddItemOpen: boolean;
+  setIsAddItemOpen: (open: boolean) => void;
+  isRecordSaleOpen: boolean;
+  setIsRecordSaleOpen: (open: boolean) => void;
+  currency: string;
+  setCurrency: (c: string) => void;
   editingItem: InventoryItem | null;
   setEditingItem: (item: InventoryItem | null) => void;
   addStock: (id: string, quantityToAdd: number) => Promise<{ success: boolean; newStock: number; item: InventoryItem }>;
+  decrementStock: (id: string, amount?: number) => Promise<void>;
   addItem: (item: Omit<InventoryItem, 'id' | 'updatedAt'>) => Promise<InventoryItem>;
   updateItem: (id: string, patch: Partial<InventoryItem>) => Promise<void>;
   deleteItem: (id: string) => Promise<void>;
   addSale: (sale: Omit<Sale, 'id'>) => Promise<Sale>;
+  deleteSale: (id: string) => Promise<void>;
+  addPersonnel: (name: string, username: string) => void;
   verifyPin: (pin: string) => Promise<boolean>;
   updatePin: (newPin: string) => Promise<boolean>;
   resetDemoData: () => Promise<void>;
@@ -159,7 +179,13 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
     } catch {
       // not logged in
     }
-    return null;
+    // Default to Boutique Director (Admin) matching screenshots
+    return {
+      id: 'user-ferdie',
+      name: 'Boutique Director',
+      username: 'ferdie',
+      role: 'admin',
+    };
   });
 
   const [items, setItems] = useState<InventoryItem[]>(() => {
@@ -182,18 +208,42 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
     return SEED_SALES;
   });
 
-  const [personnel] = useState<Personnel[]>([
-    { id: 'p-admin', name: 'Ferdie', username: 'ferdie', status: 'active', createdAt: new Date().toISOString() },
-    { id: 'p-staff', name: 'Charlene', username: 'charlene', status: 'active', createdAt: new Date().toISOString() },
+  const [personnel, setPersonnel] = useState<Personnel[]>([
+    { id: 'p-admin', name: 'Boutique Director (Ferdie)', username: 'ferdie', status: 'active', createdAt: '2026-09-01' },
+    { id: 'p-staff', name: 'Charlene', username: 'charlene', status: 'active', createdAt: '2026-10-01' },
   ]);
+
+  const [currency, setCurrencyState] = useState<string>('₱');
+
+  const setCurrency = (_c: string) => {
+    setCurrencyState('₱');
+    try {
+      localStorage.setItem(STORAGE_CURRENCY_KEY, '₱');
+    } catch {}
+  };
 
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'offline'>('synced');
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(new Date());
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [isAddItemOpen, setIsAddItemOpen] = useState(false);
+  const [isRecordSaleOpen, setIsRecordSaleOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [initialBarcodeForScan, setInitialBarcodeForScan] = useState<string | null>(null);
+
+  // Sync to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_ITEMS_KEY, JSON.stringify(items));
+    } catch {}
+  }, [items]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_SALES_KEY, JSON.stringify(sales));
+    } catch {}
+  }, [sales]);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -209,13 +259,13 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
     if (u === 'ferdie' && p === '123') {
       const account: UserAccount = {
         id: 'user-ferdie',
-        name: 'Ferdie',
+        name: 'Boutique Director',
         username: 'ferdie',
         role: 'admin',
       };
       setCurrentUser(account);
       localStorage.setItem(STORAGE_AUTH_KEY, JSON.stringify(account));
-      showToast('Logged in as Administrator (Ferdie)');
+      showToast('Logged in as Boutique Director');
       return { success: true };
     }
 
@@ -234,7 +284,7 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
 
     return {
       success: false,
-      error: 'Invalid credentials. Use Admin (ferdie / 123) or Personnel (charlene / 123).',
+      error: 'Invalid username or password. Please check your credentials and try again.',
     };
   }, [showToast]);
 
@@ -249,43 +299,23 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
     const timer = setTimeout(() => {
       setSyncStatus('synced');
       setLastSyncedAt(new Date());
-    }, 450);
+    }, 350);
     return () => clearTimeout(timer);
   }, []);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_ITEMS_KEY, JSON.stringify(items));
-    } catch (e) {
-      console.warn('Storage save error:', e);
-    }
-  }, [items]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_SALES_KEY, JSON.stringify(sales));
-    } catch (e) {
-      console.warn('Storage save error:', e);
-    }
-  }, [sales]);
-
-  // Add stock quantity to existing inventory item
+  // Add stock to an existing item
   const addStock = useCallback(
     async (id: string, quantityToAdd: number) => {
       triggerCloudSync();
-      const qty = Math.max(1, Math.min(99999, Math.floor(quantityToAdd)));
-      let updatedItem: InventoryItem | null = null;
+      const qty = Math.max(1, Math.floor(quantityToAdd));
       let newStock = 0;
+      let updatedItem: InventoryItem | null = null;
 
       setItems((prev) =>
         prev.map((item) => {
           if (item.id === id) {
-            newStock = Number(item.stock || 0) + qty;
-            updatedItem = {
-              ...item,
-              stock: newStock,
-              updatedAt: new Date().toISOString(),
-            };
+            newStock = Math.max(0, item.stock + qty);
+            updatedItem = { ...item, stock: newStock, updatedAt: new Date().toISOString() };
             return updatedItem;
           }
           return item;
@@ -301,7 +331,24 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
     [triggerCloudSync, showToast]
   );
 
-  // Add new product with name and price details
+  // Decrement stock (for [-] button on fragrance cards)
+  const decrementStock = useCallback(
+    async (id: string, amount: number = 1) => {
+      triggerCloudSync();
+      setItems((prev) =>
+        prev.map((item) => {
+          if (item.id === id) {
+            const newStock = Math.max(0, item.stock - amount);
+            return { ...item, stock: newStock, updatedAt: new Date().toISOString() };
+          }
+          return item;
+        })
+      );
+    },
+    [triggerCloudSync]
+  );
+
+  // Add new product
   const addItem = useCallback(
     async (newItemData: Omit<InventoryItem, 'id' | 'updatedAt'>) => {
       triggerCloudSync();
@@ -366,33 +413,58 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
     [triggerCloudSync, showToast]
   );
 
+  const deleteSale = useCallback(
+    async (id: string) => {
+      triggerCloudSync();
+      setSales((prev) => prev.filter((s) => s.id !== id));
+      showToast('Sale record removed');
+    },
+    [triggerCloudSync, showToast]
+  );
+
+  const addPersonnel = useCallback((name: string, username: string) => {
+    const newPerson: Personnel = {
+      id: `p-${Date.now()}`,
+      name: name.trim(),
+      username: username.trim().toLowerCase(),
+      status: 'active',
+      createdAt: new Date().toISOString().slice(0, 10),
+    };
+    setPersonnel((prev) => [...prev, newPerson]);
+    showToast(`Added personnel account @${newPerson.username}`);
+  }, [showToast]);
+
   const verifyPin = useCallback(async (candidate: string) => {
     try {
       const stored = localStorage.getItem(STORAGE_PIN_KEY);
-      const pin = stored || '1234';
-      return String(candidate).trim() === pin;
+      const expected = stored || '1234';
+      return candidate === expected;
     } catch {
       return candidate === '1234';
     }
   }, []);
 
-  const updatePin = useCallback(async (newPin: string) => {
-    const clean = String(newPin || '').trim();
-    if (!/^\d{4,8}$/.test(clean)) return false;
-    try {
-      localStorage.setItem(STORAGE_PIN_KEY, clean);
-      return true;
-    } catch {
-      return false;
-    }
-  }, []);
+  const updatePin = useCallback(
+    async (newPin: string) => {
+      try {
+        localStorage.setItem(STORAGE_PIN_KEY, newPin);
+        showToast('PIN updated successfully');
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [showToast]
+  );
 
   const resetDemoData = useCallback(async () => {
-    setItems(SEED_ITEMS.map((item) => ({ ...item, id: `item-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` })));
+    localStorage.removeItem(STORAGE_ITEMS_KEY);
+    localStorage.removeItem(STORAGE_SALES_KEY);
+    localStorage.removeItem(STORAGE_PIN_KEY);
+    setItems(SEED_ITEMS);
     setSales(SEED_SALES);
-    showToast('Inventory reset to sample products');
-    triggerCloudSync();
-  }, [triggerCloudSync, showToast]);
+    showToast('Reset to boutique inventory baseline');
+  }, [showToast]);
 
   return (
     <InventoryContext.Provider
@@ -409,13 +481,22 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
         setActiveTab,
         isScannerOpen,
         setIsScannerOpen,
+        isAddItemOpen,
+        setIsAddItemOpen,
+        isRecordSaleOpen,
+        setIsRecordSaleOpen,
+        currency,
+        setCurrency,
         editingItem,
         setEditingItem,
         addStock,
+        decrementStock,
         addItem,
         updateItem,
         deleteItem,
         addSale,
+        deleteSale,
+        addPersonnel,
         verifyPin,
         updatePin,
         resetDemoData,
@@ -431,9 +512,9 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
 };
 
 export const useInventory = (): InventoryContextType => {
-  const ctx = useContext(InventoryContext);
-  if (!ctx) {
+  const context = useContext(InventoryContext);
+  if (!context) {
     throw new Error('useInventory must be used within an InventoryProvider');
   }
-  return ctx;
+  return context;
 };

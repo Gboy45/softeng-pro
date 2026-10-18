@@ -168,6 +168,7 @@ export const ScanView: React.FC = () => {
               if (res.fields.size) setNewProductSize(res.fields.size);
               if (res.fields.type) setNewProductType(res.fields.type);
               if (res.fields.gender) setNewProductGender(res.fields.gender);
+              if (res.fields.price) setNewProductPrice(Number(res.fields.price).toFixed(2));
             }
           })
           .catch(() => {
@@ -806,12 +807,23 @@ export const ScanView: React.FC = () => {
                 </p>
               </div>
 
-              {isLookingUp && (
+              {isLookingUp ? (
                 <div className="text-xs text-[#7c7156] flex items-center justify-center gap-1.5 py-1">
                   <Sparkles className="w-3.5 h-3.5 animate-spin" />
-                  <span>Checking catalog lookup...</span>
+                  <span>Auto-detecting fragrance name from barcode...</span>
                 </div>
-              )}
+              ) : newProductName ? (
+                <div className="p-3 bg-[#faf8f4] border border-[#e7e2d4] rounded-xl text-left space-y-1 animate-fadeIn">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#7c7156] flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-[#9c8f6f]" />
+                    <span>Auto-Detected Fragrance Name</span>
+                  </div>
+                  <div className="font-serif font-bold text-sm text-[#1b1915]">{newProductName}</div>
+                  <div className="text-xs text-[#56534a]">
+                    {newProductBrand} · {newProductSize} mL · {newProductType}
+                  </div>
+                </div>
+              ) : null}
 
               <div className="flex gap-3 pt-2">
                 <button
@@ -875,11 +887,16 @@ export const ScanView: React.FC = () => {
                 </span>
               </div>
 
-              {/* Product Name */}
+              {/* Product Name (Auto-inputted from barcode) */}
               <div className="space-y-1">
-                <label className="block text-xs font-bold uppercase tracking-wider text-[#56534a]">
-                  Product Name <span className="text-[#a05539]">*</span>
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[#56534a]">
+                    Fragrance Name <span className="text-[#a05539]">*</span>
+                  </label>
+                  <span className="text-[10px] font-semibold text-[#57795c] flex items-center gap-1">
+                    <Sparkles className="w-3 h-3" /> Auto-inputted from barcode
+                  </span>
+                </div>
                 <input
                   type="text"
                   required
@@ -888,8 +905,8 @@ export const ScanView: React.FC = () => {
                     setNewProductName(e.target.value);
                     setNameError(null);
                   }}
-                  placeholder="e.g. Creed Aventus"
-                  className={`w-full px-3 py-2 bg-white border rounded-xl text-sm text-[#242119] focus:outline-none focus:ring-2 ${
+                  placeholder="Fragrance name auto-filled from barcode"
+                  className={`w-full px-3 py-2 bg-white border rounded-xl text-sm font-serif font-bold text-[#242119] focus:outline-none focus:ring-2 ${
                     nameError ? 'border-[#a05539] ring-[#a05539]/20' : 'border-[#e7e2d4] ring-[#9c8f6f]'
                   }`}
                 />

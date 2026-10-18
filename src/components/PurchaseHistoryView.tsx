@@ -1,218 +1,356 @@
 import React, { useState, useMemo } from 'react';
 import {
-  DollarSign,
+  Search,
   Plus,
+  Trash2,
   Calendar,
-  FileText,
   User,
-  Tag,
+  X,
+  FileText,
+  Eye,
+  CheckCircle2,
 } from 'lucide-react';
 import { useInventory } from '../context/InventoryContext.js';
-import {
-  isValidNameInput,
-  MAX_PURCHASE_AMOUNT,
-} from '../utils/inventoryLogic.js';
-import { PriceDisplay, PesoSign } from './PriceDisplay.js';
+import type { Sale } from '../types/inventory.js';
+import { PriceDisplay } from './PriceDisplay.js';
 
 export const PurchaseHistoryView: React.FC = () => {
-  const { sales, addSale, showToast } = useInventory();
+  const { sales, deleteSale, setIsRecordSaleOpen, currency } = useInventory();
 
-  const [period, setPeriod] = useState<'day' | 'week' | 'month'>('day');
-  const [customerName, setCustomerName] = useState('');
-  const [saleDate, setSaleDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [saleAmount, setSaleAmount] = useState('');
-  const [saleNote, setSaleNote] = useState('');
-  const [nameError, setNameError] = useState<string | null>(null);
-  const [amountError, setAmountError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  // All Time, Today, Weekly, Monthly, and Quarterly
+  const [period, setPeriod] = useState<'all' | 'today' | 'weekly' | 'monthly' | 'quarterly'>('all');
+  const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
 
-  const totalRevenue = useMemo(() => {
-    return sales.reduce((sum, s) => sum + Number(s.amount || 0), 0);
-  }, [sales]);
+  // Filter sales by search and period
+  const filteredSales = useMemo(() => {
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+    const weeklyAgo = new Date(now.getTime() - 7 * 86400000).toISOString().slice(0, 10);
+    const monthlyAgo = new Date(now.getTime() - 30 * 86400000).toISOString().slice(0, 10);
+    const quarterlyAgo = new Date(now.getTime() - 90 * 86400000).toISOString().slice(0, 10);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+    return sales.filter((sale) => {
+      // Period filter: all time, today, weekly, monthly and quarterly
+      const saleDateOnly = (sale.date || '').slice(0, 10);
+      if (period === 'today' && saleDateOnly !== todayStr) return false;
+      if (period === 'weekly' && saleDateOnly < weeklyAgo) return false;
+      if (period === 'monthly' && saleDateOnly < monthlyAgo) return false;
+      if (period === 'quarterly' && saleDateOnly < quarterlyAgo) return false;
 
-    if (!isValidNameInput(customerName)) {
-      setNameError('Name must only contain letters, spaces, hyphens, and apostrophes');
-      return;
-    }
-    setNameError(null);
-
-    const amount = parseFloat(saleAmount);
-    if (isNaN(amount) || amount <= 0 || amount > MAX_PURCHASE_AMOUNT) {
-      setAmountError(`Amount must be between ₱0.01 and ₱500,000.00`);
-      return;
-    }
-    setAmountError(null);
-
-    await addSale({
-      name: customerName.trim(),
-      date: saleDate,
-      amount,
-      note: saleNote.trim(),
+      // Search filter
+      if (!searchTerm.trim()) return true;
+      const q = searchTerm.toLowerCase();
+      return (
+        sale.name.toLowerCase().includes(q) ||
+        (sale.note && sale.note.toLowerCase().includes(q)) ||
+        sale.date.includes(q)
+      );
     });
+  }, [sales, searchTerm, period]);
 
-    setCustomerName('');
-    setSaleAmount('');
-    setSaleNote('');
-  };
+  // Compute metrics for current period
+  const totalRevenue = useMemo(
+    () => filteredSales.reduce((sum, s) => sum + Number(s.amount || 0), 0),
+    [filteredSales]
+  );
+  const salesCount = filteredSales.length;
+  const averageOrderValue = salesCount > 0 ? totalRevenue / salesCount : 0;
 
   return (
-    <div className="space-y-6 max-w-3xl pb-16 md:pb-6">
-      <div>
-        <span className="text-xs font-bold uppercase tracking-widest text-[#7c7156]">
-          Retail Sales
-        </span>
-        <h2 className="font-serif text-2xl font-bold text-[#242119]">
-          Purchase History
-        </h2>
-      </div>
-
-      {/* Total Revenue Highlight */}
-      <div className="p-5 bg-white border border-[#e7e2d4] rounded-2xl shadow-xs space-y-1">
-        <span className="text-[11px] font-bold uppercase tracking-wider text-[#8c8878]">
-          Total Store Revenue
-        </span>
-        <div className="font-sans text-3xl font-bold text-[#57795c]">
-          <PriceDisplay amount={totalRevenue} pesoClassName="text-[0.65em] font-normal opacity-75" />
+    <div className="space-y-6 pb-20 md:pb-8">
+      {/* Top Header Row */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#8c826e] block">
+            TRANSACTION LEDGER
+          </span>
+          <h1 className="font-serif text-2xl sm:text-3xl lg:text-4xl font-bold text-[#1b1915] mt-1 tracking-tight">
+            Purchase History
+          </h1>
+          <p className="text-xs sm:text-sm text-[#56534a] mt-0.5">
+            Audit log of all in-store customer perfume purchases and walk-in sales.
+          </p>
         </div>
-        <p className="text-xs text-[#8c8878]">
-          Accumulated across {sales.length} customer purchases
-        </p>
+
+        {/* Top Right: + Record New Sale Button */}
+        <button
+          onClick={() => setIsRecordSaleOpen(true)}
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#1b1915] hover:bg-[#34302a] text-white text-xs font-semibold shadow-xs transition-colors self-start sm:self-auto"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Record New Sale</span>
+        </button>
       </div>
 
-      {/* Add Sale Entry Form */}
-      <div className="p-5 bg-white border border-[#e7e2d4] rounded-2xl shadow-xs space-y-4">
-        <h3 className="font-serif text-base font-bold text-[#242119]">
-          Add Purchase Record
-        </h3>
-
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-          <div className="space-y-1">
-            <label className="block text-xs font-bold uppercase tracking-wider text-[#56534a]">
-              Customer Name <span className="text-[#a05539]">*</span>
-            </label>
-            <input
-              type="text"
-              required
-              value={customerName}
-              onChange={(e) => {
-                setCustomerName(e.target.value);
-                setNameError(null);
-              }}
-              placeholder="e.g. Maria Santos"
-              className="w-full px-3 py-2 bg-[#faf8f4] border border-[#e7e2d4] rounded-lg text-xs sm:text-sm text-[#242119] focus:outline-none focus:ring-1 focus:ring-[#9c8f6f]"
-            />
-            {nameError && <p className="text-xs text-[#a05539] font-medium">{nameError}</p>}
-          </div>
-
-          <div className="space-y-1">
-            <label className="block text-xs font-bold uppercase tracking-wider text-[#56534a]">
-              Purchase Date
-            </label>
-            <input
-              type="date"
-              required
-              value={saleDate}
-              onChange={(e) => setSaleDate(e.target.value)}
-              className="w-full px-3 py-2 bg-[#faf8f4] border border-[#e7e2d4] rounded-lg text-xs sm:text-sm text-[#242119] focus:outline-none focus:ring-1 focus:ring-[#9c8f6f]"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <label className="block text-xs font-bold uppercase tracking-wider text-[#56534a]">
-              Amount (<PesoSign />) <span className="text-[#a05539]">*</span>
-            </label>
-            <div className="relative">
-              <span className="absolute left-3 top-2 text-xs text-[#8c8878] font-normal pointer-events-none">
-                ₱
-              </span>
-              <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                max={MAX_PURCHASE_AMOUNT}
-                required
-                value={saleAmount}
-                onChange={(e) => {
-                  setSaleAmount(e.target.value);
-                  setAmountError(null);
-                }}
-                placeholder="0.00"
-                className="w-full pl-7 pr-3 py-2 bg-[#faf8f4] border border-[#e7e2d4] rounded-lg text-xs sm:text-sm font-mono text-[#242119] focus:outline-none focus:ring-1 focus:ring-[#9c8f6f]"
-              />
+      {/* 3 Metric Cards Row with Peso signs */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Total Revenue with Peso badge */}
+        <div className="p-5 bg-white border border-[#e7e2d4] rounded-2xl shadow-xs relative">
+          <div className="flex items-center justify-between text-[#8c826e]">
+            <span className="text-[11px] font-bold uppercase tracking-wider">
+              TOTAL REVENUE
+            </span>
+            <div className="w-5 h-5 rounded-full bg-[#eef2ec] border border-[#d2dfcf] text-[#57795c] font-bold text-xs flex items-center justify-center leading-none">
+              ₱
             </div>
-            {amountError && <p className="text-xs text-[#a05539] font-medium">{amountError}</p>}
           </div>
-
-          <div className="space-y-1">
-            <label className="block text-xs font-bold uppercase tracking-wider text-[#56534a]">
-              Item Note
-            </label>
-            <input
-              type="text"
-              value={saleNote}
-              onChange={(e) => setSaleNote(e.target.value)}
-              placeholder="e.g. Chanel Chance 100mL"
-              className="w-full px-3 py-2 bg-[#faf8f4] border border-[#e7e2d4] rounded-lg text-xs sm:text-sm text-[#242119] focus:outline-none focus:ring-1 focus:ring-[#9c8f6f]"
-            />
+          <div className="font-serif text-3xl font-bold text-[#1b1915] mt-2">
+            <PriceDisplay amount={totalRevenue} symbol={currency} />
           </div>
-
-          <div className="sm:col-span-2 pt-1">
-            <button
-              type="submit"
-              className="w-full py-2.5 bg-[#242119] hover:bg-[#34302a] text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors"
-            >
-              <Plus className="w-4 h-4 text-[#9c8f6f]" />
-              <span>Record Purchase</span>
-            </button>
-          </div>
-        </form>
-      </div>
-
-      {/* Purchase Log */}
-      <div className="p-5 bg-white border border-[#e7e2d4] rounded-2xl shadow-xs space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="font-serif text-base font-bold text-[#242119]">
-            Recent Transactions
-          </h3>
-          <div className="flex gap-1 bg-[#faf8f4] p-1 border border-[#e7e2d4] rounded-lg">
-            {(['day', 'week', 'month'] as const).map((p) => (
-              <button
-                key={p}
-                onClick={() => setPeriod(p)}
-                className={`px-2.5 py-1 text-xs font-semibold rounded-md capitalize transition-colors ${
-                  period === p ? 'bg-[#242119] text-white' : 'text-[#56534a] hover:bg-[#f2efe6]'
-                }`}
-              >
-                {p}
-              </button>
-            ))}
-          </div>
+          <p className="text-[11px] text-[#8c8878] mt-1">For currently filtered period</p>
         </div>
 
-        <div className="divide-y divide-[#f0ece0]">
-          {sales.length === 0 ? (
-            <p className="text-xs text-[#8c8878] py-4 text-center">No purchases recorded yet.</p>
-          ) : (
-            sales.map((sale) => (
-              <div key={sale.id} className="py-3 flex items-center justify-between gap-3">
-                <div className="space-y-0.5 min-w-0">
-                  <div className="font-bold text-xs sm:text-sm text-[#242119] truncate">
-                    {sale.name}
-                  </div>
-                  <div className="text-[11px] text-[#8c8878]">
-                    {sale.date} {sale.note && `· ${sale.note}`}
-                  </div>
+        {/* Sales Recorded with Peso badge */}
+        <div className="p-5 bg-white border border-[#e7e2d4] rounded-2xl shadow-xs relative">
+          <div className="flex items-center justify-between text-[#8c826e]">
+            <span className="text-[11px] font-bold uppercase tracking-wider">
+              SALES RECORDED
+            </span>
+            <div className="w-5 h-5 rounded-full bg-[#efeadc] border border-[#9c8f6f]/40 text-[#7c7156] font-bold text-xs flex items-center justify-center leading-none">
+              ₱
+            </div>
+          </div>
+          <div className="font-serif text-3xl font-bold text-[#1b1915] mt-2">
+            {salesCount}
+          </div>
+          <p className="text-[11px] text-[#8c8878] mt-1">Transactions completed</p>
+        </div>
+
+        {/* Average Order Value with Peso badge */}
+        <div className="p-5 bg-white border border-[#e7e2d4] rounded-2xl shadow-xs relative">
+          <div className="flex items-center justify-between text-[#8c826e]">
+            <span className="text-[11px] font-bold uppercase tracking-wider">
+              AVERAGE ORDER VALUE
+            </span>
+            <div className="w-5 h-5 rounded-full bg-[#efeadc] border border-[#9c8f6f]/40 text-[#7c7156] font-bold text-xs flex items-center justify-center leading-none">
+              ₱
+            </div>
+          </div>
+          <div className="font-serif text-3xl font-bold text-[#1b1915] mt-2">
+            <PriceDisplay amount={averageOrderValue} symbol={currency} />
+          </div>
+          <p className="text-[11px] text-[#8c8878] mt-1">Average basket per client</p>
+        </div>
+      </div>
+
+      {/* Search and Period Filter Bar: all time, today, weekly, monthly and quarterly */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        {/* Search */}
+        <div className="relative flex-1 max-w-md">
+          <Search className="w-4 h-4 absolute left-3.5 top-3 text-[#8c826e]" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search by customer name or notes..."
+            className="w-full pl-10 pr-4 py-2.5 bg-white border border-[#e7e2d4] rounded-xl text-xs sm:text-sm text-[#1b1915] placeholder-[#8c8878] focus:outline-none focus:ring-2 focus:ring-[#9c8f6f] shadow-2xs"
+          />
+        </div>
+
+        {/* Period Filter Tabs: all time, today, weekly, monthly and quarterly */}
+        <div className="inline-flex items-center p-1 bg-white border border-[#e7e2d4] rounded-xl shadow-2xs self-start sm:self-auto overflow-x-auto max-w-full">
+          {[
+            { key: 'all' as const, label: 'All Time' },
+            { key: 'today' as const, label: 'Today' },
+            { key: 'weekly' as const, label: 'Weekly' },
+            { key: 'monthly' as const, label: 'Monthly' },
+            { key: 'quarterly' as const, label: 'Quarterly' },
+          ].map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setPeriod(tab.key)}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap ${
+                period === tab.key
+                  ? 'bg-[#efeadc] text-[#1b1915] shadow-2xs'
+                  : 'text-[#8c8878] hover:text-[#1b1915]'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Transactions Table: Columns are DATE | CLIENT NAME | NOTES | AMOUNT | ACTION */}
+      <div className="bg-white border border-[#e7e2d4] rounded-2xl overflow-hidden shadow-xs">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="border-b border-[#e7e2d4] bg-[#faf8f4] text-[#8c826e] uppercase text-[10px] font-bold tracking-wider">
+                <th className="py-3 px-5">DATE</th>
+                <th className="py-3 px-5">CLIENT NAME</th>
+                <th className="py-3 px-5">NOTES</th>
+                <th className="py-3 px-5">AMOUNT</th>
+                <th className="py-3 px-5 text-right">ACTION</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#f0ece0]">
+              {filteredSales.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-12 text-center text-[#8c8878]">
+                    No sales records found for this period.
+                  </td>
+                </tr>
+              ) : (
+                filteredSales.map((sale) => (
+                  <tr
+                    key={sale.id}
+                    onClick={() => setSelectedSale(sale)}
+                    className="hover:bg-[#faf8f4] transition-colors cursor-pointer group"
+                  >
+                    <td className="py-3.5 px-5 text-[#56534a] whitespace-nowrap">
+                      <span className="inline-flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-[#8c826e]" />
+                        <span>{sale.date}</span>
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-5 font-bold text-[#1b1915] whitespace-nowrap">
+                      <span className="inline-flex items-center gap-1.5">
+                        <User className="w-3.5 h-3.5 text-[#8c826e]" />
+                        <span>{sale.name}</span>
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-5 text-[#56534a] font-medium max-w-xs truncate">
+                      {sale.note || '—'}
+                    </td>
+                    <td className="py-3.5 px-5 font-serif font-bold text-sm text-[#1b1915] whitespace-nowrap">
+                      <PriceDisplay amount={sale.amount} symbol={currency} />
+                    </td>
+                    <td className="py-3.5 px-5 text-right whitespace-nowrap">
+                      <div className="inline-flex items-center gap-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedSale(sale);
+                          }}
+                          className="p-1.5 text-[#8c8878] hover:text-[#1b1915] hover:bg-[#efeadc] rounded-lg transition-colors"
+                          title="View Purchase Description"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteSale(sale.id);
+                          }}
+                          className="p-1.5 text-[#8c8878] hover:text-[#a05539] hover:bg-[#f8ede5] rounded-lg transition-colors"
+                          title="Delete Sale Record"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Pop-up Menu / Modal for Purchase History Descriptions */}
+      {selectedSale && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn overflow-y-auto"
+        >
+          <div className="w-full max-w-md bg-white rounded-2xl border border-[#e7e2d4] shadow-2xl overflow-hidden my-auto animate-scaleUp">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#e7e2d4] bg-[#faf8f4]">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-[#1b1915] text-[#efeadc] flex items-center justify-center font-bold text-base shadow-xs">
+                  ₱
                 </div>
-                <div className="font-serif font-bold text-sm sm:text-base text-[#57795c]">
-                  <PriceDisplay amount={sale.amount} pesoClassName="text-[0.68em] font-normal" />
+                <div>
+                  <h3 className="font-serif text-lg font-bold text-[#1b1915]">
+                    Purchase Record
+                  </h3>
+                  <p className="text-[11px] text-[#8c826e] uppercase tracking-wider font-semibold">
+                    Transaction ID: #{selectedSale.id.slice(-6).toUpperCase()}
+                  </p>
                 </div>
               </div>
-            ))
-          )}
+              <button
+                type="button"
+                onClick={() => setSelectedSale(null)}
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-[#56534a] hover:bg-[#f2efe6] transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 space-y-4">
+              {/* Amount Hero */}
+              <div className="p-4 rounded-xl bg-[#faf8f4] border border-[#e7e2d4] text-center">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#8c826e] block">
+                  TOTAL AMOUNT
+                </span>
+                <div className="font-serif text-3xl font-bold text-[#1b1915] mt-1">
+                  <PriceDisplay amount={selectedSale.amount} symbol={currency} />
+                </div>
+              </div>
+
+              {/* Client and Date Grid */}
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="p-3 bg-[#faf8f4] rounded-xl border border-[#e7e2d4]">
+                  <span className="text-[10px] font-bold uppercase text-[#8c826e] block mb-0.5">
+                    CUSTOMER
+                  </span>
+                  <span className="font-semibold text-[#1b1915]">{selectedSale.name}</span>
+                </div>
+                <div className="p-3 bg-[#faf8f4] rounded-xl border border-[#e7e2d4]">
+                  <span className="text-[10px] font-bold uppercase text-[#8c826e] block mb-0.5">
+                    DATE
+                  </span>
+                  <span className="font-semibold text-[#1b1915]">{selectedSale.date}</span>
+                </div>
+              </div>
+
+              {/* Description & Notes Card */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-[#56534a] flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5 text-[#7c7156]" />
+                  <span>Purchase Description &amp; Notes</span>
+                </label>
+                <div className="p-4 bg-[#faf8f4] border border-[#e7e2d4] rounded-xl text-xs text-[#242119] leading-relaxed min-h-[75px]">
+                  {selectedSale.note ? (
+                    <p className="font-medium text-[#1b1915] whitespace-pre-wrap">{selectedSale.note}</p>
+                  ) : (
+                    <p className="italic text-[#8c8878]">No specific notes provided for this transaction.</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-2.5 pt-2 border-t border-[#e7e2d4]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const id = selectedSale.id;
+                    setSelectedSale(null);
+                    deleteSale(id);
+                  }}
+                  className="px-3.5 py-2.5 text-xs font-semibold text-[#a05539] hover:bg-[#f8ede5] border border-[#ecdccf] rounded-xl transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedSale(null)}
+                  className="flex-1 py-2.5 px-4 bg-[#1b1915] hover:bg-[#34302a] text-white text-xs font-semibold rounded-xl transition-colors shadow-xs"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };
+

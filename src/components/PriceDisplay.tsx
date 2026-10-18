@@ -3,16 +3,18 @@ import React from 'react';
 interface PriceDisplayProps {
   amount: number | string;
   className?: string;
+  symbol?: string;
   pesoClassName?: string;
   digitsClassName?: string;
 }
 
 /**
- * Renders price with a sleek, smaller, non-bulky Philippine Peso sign (₱)
+ * Renders price with sleek formatting and smaller, non-bulky currency sign ($ or ₱)
  */
 export const PriceDisplay: React.FC<PriceDisplayProps> = ({
   amount,
   className = '',
+  symbol = '₱',
   pesoClassName = '',
   digitsClassName = '',
 }) => {
@@ -22,22 +24,42 @@ export const PriceDisplay: React.FC<PriceDisplayProps> = ({
     maximumFractionDigits: 2,
   });
 
+  const isPeso = symbol === '₱';
+
   return (
     <span className={`inline-flex items-baseline font-sans ${className}`}>
       <span
-        className={`text-[0.72em] font-normal mr-0.5 opacity-85 select-none align-baseline leading-none ${pesoClassName}`}
+        className={`select-none mr-0.5 leading-none ${
+          isPeso
+            ? `text-[0.76em] font-medium opacity-90 align-baseline ${pesoClassName}`
+            : `text-[0.88em] font-semibold text-[#56534a] align-baseline ${pesoClassName}`
+        }`}
       >
-        ₱
+        {symbol}
       </span>
       <span className={digitsClassName}>{formatted}</span>
     </span>
   );
 };
 
+export const CurrencySign: React.FC<{ symbol?: string; className?: string }> = ({
+  symbol = '₱',
+  className = '',
+}) => {
+  const isPeso = symbol === '₱';
+  return (
+    <span
+      className={`select-none mr-0.5 leading-none ${
+        isPeso
+          ? `text-[0.72em] font-normal opacity-85 align-baseline ${className}`
+          : `text-[0.88em] font-semibold text-[#56534a] align-baseline ${className}`
+      }`}
+    >
+      {symbol}
+    </span>
+  );
+};
+
 export const PesoSign: React.FC<{ className?: string }> = ({ className = '' }) => (
-  <span
-    className={`text-[0.72em] font-normal select-none opacity-85 mr-0.5 align-baseline leading-none ${className}`}
-  >
-    ₱
-  </span>
+  <CurrencySign symbol="₱" className={className} />
 );

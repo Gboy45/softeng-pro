@@ -37,7 +37,14 @@ export interface Personnel {
   createdAt: string;
 }
 
-export type ActiveTab = 'dashboard' | 'inventory' | 'scan' | 'reports' | 'sales' | 'settings';
+export type ActiveTab =
+  | 'dashboard'
+  | 'inventory'
+  | 'scan'
+  | 'sales'
+  | 'reports'
+  | 'staff'
+  | 'settings';
 
 export type ScanFlowStep =
   | 'idle'
