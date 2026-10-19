@@ -25,48 +25,14 @@ export const ReportsView: React.FC = () => {
   const [fileFormat, setFileFormat] = useState<'pdf' | 'xlsx'>('pdf');
   const [activeSlide, setActiveSlide] = useState<number>(0);
 
-  // Hand / touch swipe & drag state for the Overview
-  const touchStartXRef = React.useRef<number | null>(null);
-  const touchStartYRef = React.useRef<number | null>(null);
+  // Hand / touch / mouse swipe & drag state for the side-by-side Overview carousel
+  const dragStartXRef = React.useRef<number | null>(null);
+  const dragStartYRef = React.useRef<number | null>(null);
+  const dragStartTimeRef = React.useRef<number>(0);
+  const isHorizontalSwipeRef = React.useRef<boolean | null>(null);
   const [dragOffsetX, setDragOffsetX] = useState<number>(0);
-  const isDraggingSlideRef = React.useRef<boolean>(false);
-
-  // Pointer drag-to-pan helper for inner table containers (no scrollbar)
-  const attachHandPanHandlers = () => {
-    let isDown = false;
-    let startX = 0;
-    let startY = 0;
-    let scrollLeft = 0;
-    let scrollTop = 0;
-
-    return {
-      onMouseDown: (e: React.MouseEvent<HTMLDivElement>) => {
-        const el = e.currentTarget;
-        isDown = true;
-        startX = e.pageX - el.offsetLeft;
-        startY = e.pageY - el.offsetTop;
-        scrollLeft = el.scrollLeft;
-        scrollTop = el.scrollTop;
-      },
-      onMouseLeave: () => {
-        isDown = false;
-      },
-      onMouseUp: () => {
-        isDown = false;
-      },
-      onMouseMove: (e: React.MouseEvent<HTMLDivElement>) => {
-        if (!isDown) return;
-        e.preventDefault();
-        const el = e.currentTarget;
-        const x = e.pageX - el.offsetLeft;
-        const y = e.pageY - el.offsetTop;
-        el.scrollLeft = scrollLeft - (x - startX);
-        el.scrollTop = scrollTop - (y - startY);
-      },
-    };
-  };
-
-  const panProps = attachHandPanHandlers();
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const lastWheelSwipeRef = React.useRef<number>(0);
 
   // Determine available slides based on checked report sections
   const slides = useMemo(() => {
@@ -79,44 +45,114 @@ export const ReportsView: React.FC = () => {
   const safeSlideIndex = Math.min(activeSlide, Math.max(0, slides.length - 1));
   const currentSlideType = slides[safeSlideIndex] || 'stocks';
 
+  const beginSwipe = (clientX: number, clientY: number) => {
+    dragStartXRef.current = clientX;
+    dragStartYRef.current = clientY;
+    dragStartTimeRef.current = Date.now();
+    isHorizontalSwipeRef.current = null;
+  };
+
+  const moveSwipe = (clientX: number, clientY: number) => {
+    if (dragStartXRef.current === null || dragStartYRef.current === null) return;
+    const dx = clientX - dragStartXRef.current;
+    const dy = clientY - dragStartYRef.current;
+
+    if (isHorizontalSwipeRef.current === null) {
+      if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+      isHorizontalSwipeRef.current = Math.abs(dx) >= Math.abs(dy);
+    }
+
+    if (!isHorizontalSwipeRef.current) return;
+
+    if (!isDragging) {
+      setIsDragging(true);
+    }
+
+    // Full 1:1 follow when swiping toward the other slide; gentle rubber-band at edges
+    const canGoNext = dx < 0 && safeSlideIndex < slides.length - 1;
+    const canGoPrev = dx > 0 && safeSlideIndex > 0;
+    if (canGoNext || canGoPrev) {
+      setDragOffsetX(dx);
+    } else {
+      setDragOffsetX(dx * 0.25);
+    }
+  };
+
+  const endSwipe = (clientX?: number, clientY?: number) => {
+    if (dragStartXRef.current !== null && dragStartYRef.current !== null && isHorizontalSwipeRef.current) {
+      const endX = clientX ?? dragStartXRef.current + dragOffsetX;
+      const dx = endX - dragStartXRef.current;
+      const dt = Math.max(1, Date.now() - dragStartTimeRef.current);
+      const velocity = Math.abs(dx) / dt;
+
+      if (slides.length > 1 && (Math.abs(dx) > 38 || (Math.abs(dx) > 16 && velocity > 0.22))) {
+        if (dx < 0 && safeSlideIndex < slides.length - 1) {
+          setActiveSlide(safeSlideIndex + 1);
+        } else if (dx > 0 && safeSlideIndex > 0) {
+          setActiveSlide(safeSlideIndex - 1);
+        }
+      }
+    }
+
+    dragStartXRef.current = null;
+    dragStartYRef.current = null;
+    isHorizontalSwipeRef.current = null;
+    setIsDragging(false);
+    setDragOffsetX(0);
+  };
+
   const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (slides.length <= 1) return;
-    touchStartXRef.current = e.touches[0].clientX;
-    touchStartYRef.current = e.touches[0].clientY;
-    isDraggingSlideRef.current = true;
+    const target = e.target as HTMLElement;
+    if (target.closest('button')) return;
+    beginSwipe(e.touches[0].clientX, e.touches[0].clientY);
   };
 
   const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (!isDraggingSlideRef.current || touchStartXRef.current === null || touchStartYRef.current === null) return;
-    const dx = e.touches[0].clientX - touchStartXRef.current;
-    const dy = e.touches[0].clientY - touchStartYRef.current;
-    // Only horizontal swipe if horizontal movement dominates vertical scroll
-    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 12) {
-      setDragOffsetX(Math.max(-120, Math.min(120, dx * 0.45)));
-    }
+    if (dragStartXRef.current === null) return;
+    moveSwipe(e.touches[0].clientX, e.touches[0].clientY);
   };
 
   const handleTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (!isDraggingSlideRef.current || touchStartXRef.current === null || touchStartYRef.current === null) {
-      setDragOffsetX(0);
-      return;
-    }
-    const endX = e.changedTouches[0]?.clientX ?? touchStartXRef.current;
-    const endY = e.changedTouches[0]?.clientY ?? touchStartYRef.current;
-    const dx = endX - touchStartXRef.current;
-    const dy = endY - touchStartYRef.current;
+    if (dragStartXRef.current === null) return;
+    const touch = e.changedTouches[0];
+    endSwipe(touch?.clientX, touch?.clientY);
+  };
 
-    if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) {
-      if (dx < 0 && safeSlideIndex < slides.length - 1) {
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('button')) return;
+    beginSwipe(e.clientX, e.clientY);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (dragStartXRef.current === null) return;
+    moveSwipe(e.clientX, e.clientY);
+  };
+
+  const handleMouseUp = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (dragStartXRef.current === null) return;
+    endSwipe(e.clientX, e.clientY);
+  };
+
+  const handleMouseLeave = () => {
+    if (dragStartXRef.current === null) return;
+    endSwipe();
+  };
+
+  const handleWheelSwipe = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (slides.length <= 1) return;
+    if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && Math.abs(e.deltaX) > 22) {
+      const now = Date.now();
+      if (now - lastWheelSwipeRef.current < 420) return;
+      if (e.deltaX > 0 && safeSlideIndex < slides.length - 1) {
+        lastWheelSwipeRef.current = now;
         setActiveSlide(safeSlideIndex + 1);
-      } else if (dx > 0 && safeSlideIndex > 0) {
+      } else if (e.deltaX < 0 && safeSlideIndex > 0) {
+        lastWheelSwipeRef.current = now;
         setActiveSlide(safeSlideIndex - 1);
       }
     }
-    touchStartXRef.current = null;
-    touchStartYRef.current = null;
-    isDraggingSlideRef.current = false;
-    setDragOffsetX(0);
   };
 
   const toggleStocks = () => {
@@ -443,7 +479,7 @@ export const ReportsView: React.FC = () => {
         showToast('Error generating PDF report');
       }
     } else {
-      // GENERATE MICROSOFT EXCEL WORKBOOK (.xlsx)
+      // GENERATE SPREADSHEET (.xlsx)
       try {
         const workbook = XLSX.utils.book_new();
         const combinedAoA: any[][] = [];
@@ -576,10 +612,10 @@ export const ReportsView: React.FC = () => {
         }
 
         XLSX.writeFile(workbook, `boutique-report-${dateStr}.xlsx`);
-        showToast('Successfully downloaded Excel (.xlsx) workbook');
+        showToast('Successfully downloaded Spreadsheet (.xlsx)');
       } catch (err) {
         console.error('Failed to generate XLSX:', err);
-        showToast('Error generating Excel spreadsheet');
+        showToast('Error generating Spreadsheet');
       }
     }
   };
@@ -698,7 +734,7 @@ export const ReportsView: React.FC = () => {
               >
                 <FileSpreadsheet className="w-4 h-4" />
               </div>
-              <div className="font-bold text-xs sm:text-sm text-[#1b1915] truncate">Excel Workbook</div>
+              <div className="font-bold text-xs sm:text-sm text-[#1b1915] truncate">Spreadsheet</div>
             </button>
           </div>
         </div>
@@ -709,23 +745,30 @@ export const ReportsView: React.FC = () => {
         >
           <Download className="w-4 h-4 text-[#9c8f6f]" />
           <span>
-            Generate &amp; Download {fileFormat === 'pdf' ? 'PDF (.pdf)' : 'Excel (.xlsx)'} Report
+            Generate &amp; Download {fileFormat === 'pdf' ? 'PDF (.pdf)' : 'Spreadsheet (.xlsx)'} Report
           </span>
         </button>
       </div>
 
-      {/* Compact Hand-Swipeable Document Overview (No Scrollbars) */}
+      {/* Side-by-Side Horizontal Swipeable Document & Spreadsheet Overview (No Scrollbars) */}
       <div
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        className="p-3.5 sm:p-5 bg-white border border-[#e7e2d4] rounded-2xl shadow-xs space-y-3 select-none overflow-hidden"
+        onTouchCancel={handleTouchEnd}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseLeave}
+        onWheel={handleWheelSwipe}
+        style={{ touchAction: 'pan-y' }}
+        className="p-3.5 sm:p-5 bg-white border border-[#e7e2d4] rounded-2xl shadow-xs space-y-3 select-none overflow-hidden cursor-grab active:cursor-grabbing"
       >
         <div className="flex items-center justify-between gap-2 border-b border-[#f0ece0] pb-2.5">
           <div className="flex items-center gap-2 min-w-0">
             <Eye className="w-4 h-4 text-[#7c7156] shrink-0" />
             <h3 className="text-xs sm:text-base font-bold text-[#242119] truncate">
-              {fileFormat === 'pdf' ? 'PDF Document Overview' : 'Excel Workbook Overview'}
+              {fileFormat === 'pdf' ? 'PDF Document Overview' : 'Spreadsheet Overview'}
             </h3>
           </div>
 
@@ -762,364 +805,373 @@ export const ReportsView: React.FC = () => {
           )}
         </div>
 
-        {/* Swipeable Slide Viewport */}
-        <div
-          style={{
-            transform: `translateX(${dragOffsetX}px)`,
-            transition: dragOffsetX === 0 ? 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)' : 'none',
-          }}
-        >
-          {fileFormat === 'pdf' ? (
-            /* COMPACT HAND-SWIPEABLE PDF OVERVIEW (NO SCROLLBAR) */
-            <div className="border border-[#d8d2c2] rounded-xl overflow-hidden bg-white shadow-inner">
-              {/* Simulated PDF Dark Luxury Header */}
-              <div className="bg-[#242119] text-white p-3 border-b-2 border-[#9c8f6f] space-y-1">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="text-[11px] sm:text-xs font-bold tracking-wide uppercase truncate">
-                    {includeStocks && includePurchaseHistory
-                      ? 'BOUTIQUE STOCKS & PURCHASE HISTORY REPORT'
-                      : includeStocks
-                      ? 'AVAILABLE & TOTAL STOCKS REPORT'
-                      : 'PURCHASE HISTORY & TOTAL SALES REPORT'}
-                  </div>
-                  {slides.length > 1 && (
-                    <span className="text-[10px] text-[#efeadc] bg-white/10 px-2 py-0.5 rounded shrink-0">
-                      Swipe {safeSlideIndex + 1}/{slides.length}
-                    </span>
-                  )}
-                </div>
-                <div className="text-[10px] sm:text-[11px] text-[#efeadc] flex flex-wrap gap-x-2.5 gap-y-0.5">
-                  <span>Date: {formattedDate}</span>
-                  {includeStocks && (
-                    <>
-                      <span>|</span>
-                      <span>Total Stocks: {totalUnits} pcs</span>
-                      <span>|</span>
-                      <span>
-                        Value: <PriceDisplay amount={totalValuation} symbol={currency} />
-                      </span>
-                    </>
-                  )}
-                  {includePurchaseHistory && (
-                    <>
-                      <span>|</span>
-                      <span>
-                        Total Sales: <PriceDisplay amount={totalSalesRevenue} symbol={currency} />
-                      </span>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* Hand-Swipeable Table Container (Compact Height, Zero Scrollbars) */}
-              <div
-                {...panProps}
-                className="p-2.5 sm:p-3 max-h-[235px] sm:max-h-[290px] overflow-auto no-scrollbar touch-pan-x touch-pan-y cursor-grab active:cursor-grabbing"
-              >
-                {currentSlideType === 'stocks' ? (
-                  <div className="space-y-1.5">
-                    <div className="text-[11px] font-bold text-[#242119] uppercase tracking-wider">
-                      {includePurchaseHistory
-                        ? '1. AVAILABLE & TOTAL STOCKS (SWIPE LEFT FOR SALES)'
-                        : 'AVAILABLE & TOTAL STOCKS'}
+        {/* Horizontal Screen Carousel Viewport */}
+        <div className="relative w-full overflow-hidden rounded-xl">
+          <div
+            className="flex w-full will-change-transform"
+            style={{
+              transform: `translate3d(calc(-${safeSlideIndex * 100}% + ${dragOffsetX}px), 0, 0)`,
+              transition: isDragging
+                ? 'none'
+                : 'transform 0.38s cubic-bezier(0.22, 1, 0.36, 1)',
+            }}
+          >
+            {slides.map((slideType, slideIdx) => (
+              <div key={slideType} className="w-full min-w-full shrink-0">
+                {fileFormat === 'pdf' ? (
+                  /* SIDE-BY-SIDE SWIPEABLE PDF DOCUMENT OVERVIEW SLIDE */
+                  <div className="border border-[#d8d2c2] rounded-xl overflow-hidden bg-white shadow-inner">
+                    {/* Simulated PDF Dark Luxury Header */}
+                    <div className="bg-[#242119] text-white p-3 border-b-2 border-[#9c8f6f] space-y-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-[11px] sm:text-xs font-bold tracking-wide uppercase truncate">
+                          {includeStocks && includePurchaseHistory
+                            ? 'BOUTIQUE STOCKS & PURCHASE HISTORY REPORT'
+                            : includeStocks
+                            ? 'AVAILABLE & TOTAL STOCKS REPORT'
+                            : 'PURCHASE HISTORY & TOTAL SALES REPORT'}
+                        </div>
+                        {slides.length > 1 && (
+                          <span className="text-[10px] text-[#efeadc] bg-white/10 px-2 py-0.5 rounded shrink-0">
+                            Swipe {slideIdx + 1}/{slides.length}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[10px] sm:text-[11px] text-[#efeadc] flex flex-wrap gap-x-2.5 gap-y-0.5">
+                        <span>Date: {formattedDate}</span>
+                        {includeStocks && (
+                          <>
+                            <span>|</span>
+                            <span>Total Stocks: {totalUnits} pcs</span>
+                            <span>|</span>
+                            <span>
+                              Value: <PriceDisplay amount={totalValuation} symbol={currency} />
+                            </span>
+                          </>
+                        )}
+                        {includePurchaseHistory && (
+                          <>
+                            <span>|</span>
+                            <span>
+                              Total Sales: <PriceDisplay amount={totalSalesRevenue} symbol={currency} />
+                            </span>
+                          </>
+                        )}
+                      </div>
                     </div>
-                    <div className="border border-[#e7e2d4] rounded-lg overflow-hidden">
-                      <table className="w-full text-left text-[11px] sm:text-xs">
-                        <thead>
-                          <tr className="bg-[#242119] text-white">
-                            <th className="py-1.5 px-2.5">Fragrance</th>
-                            <th className="py-1.5 px-2.5">Brand</th>
-                            <th className="py-1.5 px-2.5">Size</th>
-                            <th className="py-1.5 px-2.5">Stock</th>
-                            <th className="py-1.5 px-2.5">Price</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-[#e7e2d4]">
-                          {items.map((item, idx) => (
-                            <tr
-                              key={item.id}
-                              className={idx % 2 === 1 ? 'bg-[#faf8f4]' : 'bg-white'}
-                            >
-                              <td className="py-1.5 px-2.5 text-[#242119] whitespace-nowrap">
-                                {item.name}
-                              </td>
-                              <td className="py-1.5 px-2.5 text-[#56534a] whitespace-nowrap">
-                                {item.brand}
-                              </td>
-                              <td className="py-1.5 px-2.5 text-[#56534a] whitespace-nowrap">
-                                {item.size} mL
-                              </td>
-                              <td className="py-1.5 px-2.5 text-[#242119] whitespace-nowrap">
-                                {item.stock} pcs
-                              </td>
-                              <td className="py-1.5 px-2.5 text-[#242119] whitespace-nowrap">
-                                <PriceDisplay amount={item.price} symbol={currency} />
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                        <tfoot>
-                          <tr className="bg-[#efeadc] text-[#242119] border-t-2 border-[#9c8f6f]">
-                            <td className="py-1.5 px-2.5 font-bold">TOTAL STOCKS</td>
-                            <td className="py-1.5 px-2.5">{items.length} SKUs</td>
-                            <td className="py-1.5 px-2.5"></td>
-                            <td className="py-1.5 px-2.5 font-bold whitespace-nowrap">
-                              {totalUnits} pcs
-                            </td>
-                            <td className="py-1.5 px-2.5 font-bold whitespace-nowrap">
-                              <PriceDisplay amount={totalValuation} symbol={currency} />
-                            </td>
-                          </tr>
-                        </tfoot>
-                      </table>
+
+                    {/* Slide Body (No Scrollbar) */}
+                    <div className="p-2.5 sm:p-3 max-h-[245px] sm:max-h-[295px] overflow-y-auto overflow-x-auto no-scrollbar">
+                      {slideType === 'stocks' ? (
+                        <div className="space-y-1.5">
+                          <div className="text-[11px] font-bold text-[#242119] uppercase tracking-wider">
+                            {includePurchaseHistory
+                              ? '1. AVAILABLE & TOTAL STOCKS (SWIPE LEFT FOR SALES)'
+                              : 'AVAILABLE & TOTAL STOCKS'}
+                          </div>
+                          <div className="border border-[#e7e2d4] rounded-lg overflow-hidden">
+                            <table className="w-full text-left text-[11px] sm:text-xs">
+                              <thead>
+                                <tr className="bg-[#242119] text-white">
+                                  <th className="py-1.5 px-2 sm:px-2.5">Fragrance</th>
+                                  <th className="py-1.5 px-2 sm:px-2.5">Brand</th>
+                                  <th className="py-1.5 px-2 sm:px-2.5">Size</th>
+                                  <th className="py-1.5 px-2 sm:px-2.5">Stock</th>
+                                  <th className="py-1.5 px-2 sm:px-2.5">Price</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-[#e7e2d4]">
+                                {items.map((item, idx) => (
+                                  <tr
+                                    key={item.id}
+                                    className={idx % 2 === 1 ? 'bg-[#faf8f4]' : 'bg-white'}
+                                  >
+                                    <td className="py-1.5 px-2 sm:px-2.5 text-[#242119]">
+                                      {item.name}
+                                    </td>
+                                    <td className="py-1.5 px-2 sm:px-2.5 text-[#56534a]">
+                                      {item.brand}
+                                    </td>
+                                    <td className="py-1.5 px-2 sm:px-2.5 text-[#56534a] whitespace-nowrap">
+                                      {item.size} mL
+                                    </td>
+                                    <td className="py-1.5 px-2 sm:px-2.5 text-[#242119] whitespace-nowrap">
+                                      {item.stock} pcs
+                                    </td>
+                                    <td className="py-1.5 px-2 sm:px-2.5 text-[#242119] whitespace-nowrap">
+                                      <PriceDisplay amount={item.price} symbol={currency} />
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                              <tfoot>
+                                <tr className="bg-[#efeadc] text-[#242119] border-t-2 border-[#9c8f6f]">
+                                  <td className="py-1.5 px-2 sm:px-2.5 font-bold">TOTAL STOCKS</td>
+                                  <td className="py-1.5 px-2 sm:px-2.5">{items.length} SKUs</td>
+                                  <td className="py-1.5 px-2 sm:px-2.5"></td>
+                                  <td className="py-1.5 px-2 sm:px-2.5 font-bold whitespace-nowrap">
+                                    {totalUnits} pcs
+                                  </td>
+                                  <td className="py-1.5 px-2 sm:px-2.5 font-bold whitespace-nowrap">
+                                    <PriceDisplay amount={totalValuation} symbol={currency} />
+                                  </td>
+                                </tr>
+                              </tfoot>
+                            </table>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          <div className="text-[11px] font-bold text-[#242119] uppercase tracking-wider">
+                            {includeStocks
+                              ? '2. PURCHASE HISTORY & TOTAL SALES (SWIPE RIGHT FOR STOCKS)'
+                              : 'PURCHASE HISTORY & TOTAL SALES'}
+                          </div>
+                          <div className="border border-[#e7e2d4] rounded-lg overflow-hidden">
+                            <table className="w-full text-left text-[11px] sm:text-xs">
+                              <thead>
+                                <tr className="bg-[#242119] text-white">
+                                  <th className="py-1.5 px-2 sm:px-2.5">Date</th>
+                                  <th className="py-1.5 px-2 sm:px-2.5">Client Name</th>
+                                  <th className="py-1.5 px-2 sm:px-2.5">Items / Notes</th>
+                                  <th className="py-1.5 px-2 sm:px-2.5">Amount</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-[#e7e2d4]">
+                                {sortedSales.map((s, idx) => (
+                                  <tr
+                                    key={s.id}
+                                    className={idx % 2 === 1 ? 'bg-[#faf8f4]' : 'bg-white'}
+                                  >
+                                    <td className="py-1.5 px-2 sm:px-2.5 text-[#56534a] whitespace-nowrap">
+                                      {s.date}
+                                    </td>
+                                    <td className="py-1.5 px-2 sm:px-2.5 text-[#242119]">
+                                      {s.name}
+                                    </td>
+                                    <td className="py-1.5 px-2 sm:px-2.5 text-[#56534a]">
+                                      {s.note || '—'}
+                                    </td>
+                                    <td className="py-1.5 px-2 sm:px-2.5 text-[#242119] whitespace-nowrap">
+                                      <PriceDisplay amount={s.amount} symbol={currency} />
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                              <tfoot>
+                                <tr className="bg-[#efeadc] text-[#242119] border-t-2 border-[#9c8f6f]">
+                                  <td className="py-1.5 px-2 sm:px-2.5 font-bold">TOTAL SALES</td>
+                                  <td className="py-1.5 px-2 sm:px-2.5">{sortedSales.length} Sales</td>
+                                  <td className="py-1.5 px-2 sm:px-2.5"></td>
+                                  <td className="py-1.5 px-2 sm:px-2.5 font-bold whitespace-nowrap">
+                                    <PriceDisplay amount={totalSalesRevenue} symbol={currency} />
+                                  </td>
+                                </tr>
+                              </tfoot>
+                            </table>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-1.5">
-                    <div className="text-[11px] font-bold text-[#242119] uppercase tracking-wider">
-                      {includeStocks
-                        ? '2. PURCHASE HISTORY & TOTAL SALES (SWIPE RIGHT FOR STOCKS)'
-                        : 'PURCHASE HISTORY & TOTAL SALES'}
+                  /* SIDE-BY-SIDE SWIPEABLE SPREADSHEET (.XLSX) OVERVIEW SLIDE */
+                  <div className="border border-[#c9d8c5] rounded-xl overflow-hidden bg-white shadow-inner">
+                    {/* Simulated Spreadsheet Top Ribbon Bar */}
+                    <div className="bg-[#217346] text-white px-3 py-2 flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2 truncate">
+                        <FileSpreadsheet className="w-4 h-4 shrink-0" />
+                        <span className="truncate">boutique-report-{dateStr}.xlsx</span>
+                      </div>
+                      <span className="text-[10px] bg-white/15 px-2 py-0.5 rounded shrink-0">
+                        {slides.length > 1
+                          ? `Swipe ${slideIdx + 1}/${slides.length}`
+                          : 'Sheet 1/1'}
+                      </span>
                     </div>
-                    <div className="border border-[#e7e2d4] rounded-lg overflow-hidden">
-                      <table className="w-full text-left text-[11px] sm:text-xs">
-                        <thead>
-                          <tr className="bg-[#242119] text-white">
-                            <th className="py-1.5 px-2.5">Date</th>
-                            <th className="py-1.5 px-2.5">Client Name</th>
-                            <th className="py-1.5 px-2.5">Items / Notes</th>
-                            <th className="py-1.5 px-2.5">Amount</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-[#e7e2d4]">
-                          {sortedSales.map((s, idx) => (
-                            <tr
-                              key={s.id}
-                              className={idx % 2 === 1 ? 'bg-[#faf8f4]' : 'bg-white'}
-                            >
-                              <td className="py-1.5 px-2.5 text-[#56534a] whitespace-nowrap">
-                                {s.date}
+
+                    {/* Spreadsheet Grid Container (No Scrollbar) */}
+                    <div className="max-h-[245px] sm:max-h-[295px] overflow-y-auto overflow-x-auto no-scrollbar">
+                      {slideType === 'stocks' ? (
+                        <table className="w-full text-left text-[11px] sm:text-xs border-collapse">
+                          <thead>
+                            <tr className="bg-[#f3f2f1] text-[#56534a] border-b border-[#d2d0ce] text-center">
+                              <th className="py-1 px-1.5 sm:px-2 border-r border-[#d2d0ce] w-7">#</th>
+                              <th className="py-1 px-2 sm:px-2.5 border-r border-[#d2d0ce]">A</th>
+                              <th className="py-1 px-2 sm:px-2.5 border-r border-[#d2d0ce]">B</th>
+                              <th className="py-1 px-2 sm:px-2.5 border-r border-[#d2d0ce]">C</th>
+                              <th className="py-1 px-2 sm:px-2.5 border-r border-[#d2d0ce]">D</th>
+                              <th className="py-1 px-2 sm:px-2.5">E</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-[#e1dfdd]">
+                            <tr className="bg-[#eef2ec]">
+                              <td className="py-1 px-1.5 sm:px-2 border-r border-[#d2d0ce] text-center text-[#8c8878] bg-[#f3f2f1]">
+                                1
                               </td>
-                              <td className="py-1.5 px-2.5 text-[#242119] whitespace-nowrap">
-                                {s.name}
-                              </td>
-                              <td className="py-1.5 px-2.5 text-[#56534a] whitespace-nowrap">
-                                {s.note || '—'}
-                              </td>
-                              <td className="py-1.5 px-2.5 text-[#242119] whitespace-nowrap">
-                                <PriceDisplay amount={s.amount} symbol={currency} />
+                              <td colSpan={5} className="py-1 px-2 sm:px-2.5 font-bold text-[#217346]">
+                                {includePurchaseHistory
+                                  ? `1. AVAILABLE & TOTAL STOCKS (${totalUnits} pcs) — SWIPE LEFT FOR SALES`
+                                  : `AVAILABLE & TOTAL STOCKS (${totalUnits} pcs)`}
                               </td>
                             </tr>
-                          ))}
-                        </tbody>
-                        <tfoot>
-                          <tr className="bg-[#efeadc] text-[#242119] border-t-2 border-[#9c8f6f]">
-                            <td className="py-1.5 px-2.5 font-bold">TOTAL SALES</td>
-                            <td className="py-1.5 px-2.5">{sortedSales.length} Sales</td>
-                            <td className="py-1.5 px-2.5"></td>
-                            <td className="py-1.5 px-2.5 font-bold whitespace-nowrap">
-                              <PriceDisplay amount={totalSalesRevenue} symbol={currency} />
-                            </td>
-                          </tr>
-                        </tfoot>
-                      </table>
+                            <tr className="bg-[#242119] text-white">
+                              <td className="py-1 px-1.5 sm:px-2 border-r border-[#d2d0ce] text-center text-[#8c8878] bg-[#f3f2f1]">
+                                2
+                              </td>
+                              <td className="py-1 px-2 sm:px-2.5 border-r border-[#34302a]">Fragrance</td>
+                              <td className="py-1 px-2 sm:px-2.5 border-r border-[#34302a]">Brand</td>
+                              <td className="py-1 px-2 sm:px-2.5 border-r border-[#34302a]">Size</td>
+                              <td className="py-1 px-2 sm:px-2.5 border-r border-[#34302a]">Stock</td>
+                              <td className="py-1 px-2 sm:px-2.5">Price</td>
+                            </tr>
+                            {items.map((item, idx) => (
+                              <tr key={item.id} className="hover:bg-[#faf8f4]">
+                                <td className="py-1 px-1.5 sm:px-2 border-r border-[#d2d0ce] text-center text-[#8c8878] bg-[#f3f2f1]">
+                                  {idx + 3}
+                                </td>
+                                <td className="py-1 px-2 sm:px-2.5 border-r border-[#e1dfdd]">
+                                  {item.name}
+                                </td>
+                                <td className="py-1 px-2 sm:px-2.5 border-r border-[#e1dfdd]">
+                                  {item.brand}
+                                </td>
+                                <td className="py-1 px-2 sm:px-2.5 border-r border-[#e1dfdd] whitespace-nowrap">
+                                  {item.size} mL
+                                </td>
+                                <td className="py-1 px-2 sm:px-2.5 border-r border-[#e1dfdd] whitespace-nowrap">
+                                  {item.stock}
+                                </td>
+                                <td className="py-1 px-2 sm:px-2.5 whitespace-nowrap">
+                                  <PriceDisplay amount={item.price} symbol={currency} />
+                                </td>
+                              </tr>
+                            ))}
+                            <tr className="bg-[#efeadc] font-bold">
+                              <td className="py-1 px-1.5 sm:px-2 border-r border-[#d2d0ce] text-center text-[#8c8878] bg-[#f3f2f1]">
+                                {items.length + 3}
+                              </td>
+                              <td className="py-1 px-2 sm:px-2.5 border-r border-[#d2d0ce]">TOTAL STOCKS</td>
+                              <td className="py-1 px-2 sm:px-2.5 border-r border-[#d2d0ce]">
+                                {items.length} SKUs
+                              </td>
+                              <td className="py-1 px-2 sm:px-2.5 border-r border-[#d2d0ce]"></td>
+                              <td className="py-1 px-2 sm:px-2.5 border-r border-[#d2d0ce] whitespace-nowrap">
+                                {totalUnits} pcs
+                              </td>
+                              <td className="py-1 px-2 sm:px-2.5 whitespace-nowrap">
+                                <PriceDisplay amount={totalValuation} symbol={currency} />
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      ) : (
+                        <table className="w-full text-left text-[11px] sm:text-xs border-collapse">
+                          <thead>
+                            <tr className="bg-[#f3f2f1] text-[#56534a] border-b border-[#d2d0ce] text-center">
+                              <th className="py-1 px-1.5 sm:px-2 border-r border-[#d2d0ce] w-7">#</th>
+                              <th className="py-1 px-2 sm:px-2.5 border-r border-[#d2d0ce]">A</th>
+                              <th className="py-1 px-2 sm:px-2.5 border-r border-[#d2d0ce]">B</th>
+                              <th className="py-1 px-2 sm:px-2.5 border-r border-[#d2d0ce]">C</th>
+                              <th className="py-1 px-2 sm:px-2.5">D</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-[#e1dfdd]">
+                            <tr className="bg-[#eef2ec]">
+                              <td className="py-1 px-1.5 sm:px-2 border-r border-[#d2d0ce] text-center text-[#8c8878] bg-[#f3f2f1]">
+                                1
+                              </td>
+                              <td colSpan={4} className="py-1 px-2 sm:px-2.5 font-bold text-[#217346]">
+                                {includeStocks
+                                  ? '2. PURCHASE HISTORY & TOTAL SALES (SWIPE RIGHT FOR STOCKS)'
+                                  : 'PURCHASE HISTORY & TOTAL SALES'}
+                              </td>
+                            </tr>
+                            <tr className="bg-[#242119] text-white">
+                              <td className="py-1 px-1.5 sm:px-2 border-r border-[#d2d0ce] text-center text-[#8c8878] bg-[#f3f2f1]">
+                                2
+                              </td>
+                              <td className="py-1 px-2 sm:px-2.5 border-r border-[#34302a]">Date</td>
+                              <td className="py-1 px-2 sm:px-2.5 border-r border-[#34302a]">Client Name</td>
+                              <td className="py-1 px-2 sm:px-2.5 border-r border-[#34302a]">Items / Notes</td>
+                              <td className="py-1 px-2 sm:px-2.5">Amount</td>
+                            </tr>
+                            {sortedSales.map((s, idx) => (
+                              <tr key={s.id} className="hover:bg-[#faf8f4]">
+                                <td className="py-1 px-1.5 sm:px-2 border-r border-[#d2d0ce] text-center text-[#8c8878] bg-[#f3f2f1]">
+                                  {idx + 3}
+                                </td>
+                                <td className="py-1 px-2 sm:px-2.5 border-r border-[#e1dfdd] whitespace-nowrap">
+                                  {s.date}
+                                </td>
+                                <td className="py-1 px-2 sm:px-2.5 border-r border-[#e1dfdd]">
+                                  {s.name}
+                                </td>
+                                <td className="py-1 px-2 sm:px-2.5 border-r border-[#e1dfdd]">
+                                  {s.note || '—'}
+                                </td>
+                                <td className="py-1 px-2 sm:px-2.5 whitespace-nowrap">
+                                  <PriceDisplay amount={s.amount} symbol={currency} />
+                                </td>
+                              </tr>
+                            ))}
+                            <tr className="bg-[#efeadc] font-bold">
+                              <td className="py-1 px-1.5 sm:px-2 border-r border-[#d2d0ce] text-center text-[#8c8878] bg-[#f3f2f1]">
+                                {sortedSales.length + 3}
+                              </td>
+                              <td className="py-1 px-2 sm:px-2.5 border-r border-[#d2d0ce]">TOTAL SALES</td>
+                              <td className="py-1 px-2 sm:px-2.5 border-r border-[#d2d0ce]">
+                                {sortedSales.length} Sales
+                              </td>
+                              <td className="py-1 px-2 sm:px-2.5 border-r border-[#d2d0ce]"></td>
+                              <td className="py-1 px-2 sm:px-2.5 whitespace-nowrap">
+                                <PriceDisplay amount={totalSalesRevenue} symbol={currency} />
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+
+                    {/* Simulated Spreadsheet Bottom Sheet Tabs */}
+                    <div className="bg-[#f3f2f1] border-t border-[#d2d0ce] px-2.5 py-1 flex items-center gap-1.5 text-[11px]">
+                      {includeStocks && (
+                        <button
+                          type="button"
+                          onClick={() => setActiveSlide(0)}
+                          className={`px-2.5 py-1 rounded-t border-b-2 transition-colors ${
+                            currentSlideType === 'stocks'
+                              ? 'bg-white text-[#217346] border-[#217346] shadow-2xs'
+                              : 'text-[#56534a] border-transparent hover:bg-white/60'
+                          }`}
+                        >
+                          Available Stocks
+                        </button>
+                      )}
+                      {includePurchaseHistory && (
+                        <button
+                          type="button"
+                          onClick={() => setActiveSlide(includeStocks ? 1 : 0)}
+                          className={`px-2.5 py-1 rounded-t border-b-2 transition-colors ${
+                            currentSlideType === 'sales'
+                              ? 'bg-white text-[#217346] border-[#217346] shadow-2xs'
+                              : 'text-[#56534a] border-transparent hover:bg-white/60'
+                          }`}
+                        >
+                          Purchase History
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}
               </div>
-            </div>
-          ) : (
-            /* COMPACT HAND-SWIPEABLE EXCEL WORKBOOK (.XLSX) OVERVIEW (NO SCROLLBAR) */
-            <div className="border border-[#c9d8c5] rounded-xl overflow-hidden bg-white shadow-inner">
-              {/* Simulated Excel Top Ribbon Bar */}
-              <div className="bg-[#217346] text-white px-3 py-2 flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2 truncate">
-                  <FileSpreadsheet className="w-4 h-4 shrink-0" />
-                  <span className="truncate">boutique-report-{dateStr}.xlsx</span>
-                </div>
-                <span className="text-[10px] bg-white/15 px-2 py-0.5 rounded shrink-0">
-                  {slides.length > 1 ? `Sheet ${safeSlideIndex + 1}/${slides.length}` : 'Sheet 1/1'}
-                </span>
-              </div>
-
-              {/* Hand-Swipeable Excel Grid Container (Compact Height, Zero Scrollbars) */}
-              <div
-                {...panProps}
-                className="max-h-[235px] sm:max-h-[290px] overflow-auto no-scrollbar touch-pan-x touch-pan-y cursor-grab active:cursor-grabbing"
-              >
-                {currentSlideType === 'stocks' ? (
-                  <table className="w-full text-left text-[11px] sm:text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-[#f3f2f1] text-[#56534a] border-b border-[#d2d0ce] text-center">
-                        <th className="py-1 px-2 border-r border-[#d2d0ce] w-7">#</th>
-                        <th className="py-1 px-2.5 border-r border-[#d2d0ce]">A</th>
-                        <th className="py-1 px-2.5 border-r border-[#d2d0ce]">B</th>
-                        <th className="py-1 px-2.5 border-r border-[#d2d0ce]">C</th>
-                        <th className="py-1 px-2.5 border-r border-[#d2d0ce]">D</th>
-                        <th className="py-1 px-2.5">E</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#e1dfdd]">
-                      <tr className="bg-[#eef2ec]">
-                        <td className="py-1 px-2 border-r border-[#d2d0ce] text-center text-[#8c8878] bg-[#f3f2f1]">
-                          1
-                        </td>
-                        <td colSpan={5} className="py-1 px-2.5 font-bold text-[#217346]">
-                          AVAILABLE &amp; TOTAL STOCKS ({totalUnits} pcs)
-                        </td>
-                      </tr>
-                      <tr className="bg-[#242119] text-white">
-                        <td className="py-1 px-2 border-r border-[#d2d0ce] text-center text-[#8c8878] bg-[#f3f2f1]">
-                          2
-                        </td>
-                        <td className="py-1 px-2.5 border-r border-[#34302a]">Fragrance</td>
-                        <td className="py-1 px-2.5 border-r border-[#34302a]">Brand</td>
-                        <td className="py-1 px-2.5 border-r border-[#34302a]">Size</td>
-                        <td className="py-1 px-2.5 border-r border-[#34302a]">Stock</td>
-                        <td className="py-1 px-2.5">Price (₱)</td>
-                      </tr>
-                      {items.map((item, idx) => (
-                        <tr key={item.id} className="hover:bg-[#faf8f4]">
-                          <td className="py-1 px-2 border-r border-[#d2d0ce] text-center text-[#8c8878] bg-[#f3f2f1]">
-                            {idx + 3}
-                          </td>
-                          <td className="py-1 px-2.5 border-r border-[#e1dfdd] whitespace-nowrap">
-                            {item.name}
-                          </td>
-                          <td className="py-1 px-2.5 border-r border-[#e1dfdd] whitespace-nowrap">
-                            {item.brand}
-                          </td>
-                          <td className="py-1 px-2.5 border-r border-[#e1dfdd] whitespace-nowrap">
-                            {item.size} mL
-                          </td>
-                          <td className="py-1 px-2.5 border-r border-[#e1dfdd] whitespace-nowrap">
-                            {item.stock}
-                          </td>
-                          <td className="py-1 px-2.5 whitespace-nowrap">
-                            <PriceDisplay amount={item.price} symbol={currency} />
-                          </td>
-                        </tr>
-                      ))}
-                      <tr className="bg-[#efeadc] font-bold">
-                        <td className="py-1 px-2 border-r border-[#d2d0ce] text-center text-[#8c8878] bg-[#f3f2f1]">
-                          {items.length + 3}
-                        </td>
-                        <td className="py-1 px-2.5 border-r border-[#d2d0ce]">TOTAL STOCKS</td>
-                        <td className="py-1 px-2.5 border-r border-[#d2d0ce]">
-                          {items.length} SKUs
-                        </td>
-                        <td className="py-1 px-2.5 border-r border-[#d2d0ce]"></td>
-                        <td className="py-1 px-2.5 border-r border-[#d2d0ce] whitespace-nowrap">
-                          {totalUnits} pcs
-                        </td>
-                        <td className="py-1 px-2.5 whitespace-nowrap">
-                          <PriceDisplay amount={totalValuation} symbol={currency} />
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                ) : (
-                  <table className="w-full text-left text-[11px] sm:text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-[#f3f2f1] text-[#56534a] border-b border-[#d2d0ce] text-center">
-                        <th className="py-1 px-2 border-r border-[#d2d0ce] w-7">#</th>
-                        <th className="py-1 px-2.5 border-r border-[#d2d0ce]">A</th>
-                        <th className="py-1 px-2.5 border-r border-[#d2d0ce]">B</th>
-                        <th className="py-1 px-2.5 border-r border-[#d2d0ce]">C</th>
-                        <th className="py-1 px-2.5">D</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#e1dfdd]">
-                      <tr className="bg-[#eef2ec]">
-                        <td className="py-1 px-2 border-r border-[#d2d0ce] text-center text-[#8c8878] bg-[#f3f2f1]">
-                          1
-                        </td>
-                        <td colSpan={4} className="py-1 px-2.5 font-bold text-[#217346]">
-                          PURCHASE HISTORY &amp; TOTAL SALES
-                        </td>
-                      </tr>
-                      <tr className="bg-[#242119] text-white">
-                        <td className="py-1 px-2 border-r border-[#d2d0ce] text-center text-[#8c8878] bg-[#f3f2f1]">
-                          2
-                        </td>
-                        <td className="py-1 px-2.5 border-r border-[#34302a]">Date</td>
-                        <td className="py-1 px-2.5 border-r border-[#34302a]">Client Name</td>
-                        <td className="py-1 px-2.5 border-r border-[#34302a]">Items / Notes</td>
-                        <td className="py-1 px-2.5">Amount (₱)</td>
-                      </tr>
-                      {sortedSales.map((s, idx) => (
-                        <tr key={s.id} className="hover:bg-[#faf8f4]">
-                          <td className="py-1 px-2 border-r border-[#d2d0ce] text-center text-[#8c8878] bg-[#f3f2f1]">
-                            {idx + 3}
-                          </td>
-                          <td className="py-1 px-2.5 border-r border-[#e1dfdd] whitespace-nowrap">
-                            {s.date}
-                          </td>
-                          <td className="py-1 px-2.5 border-r border-[#e1dfdd] whitespace-nowrap">
-                            {s.name}
-                          </td>
-                          <td className="py-1 px-2.5 border-r border-[#e1dfdd] whitespace-nowrap">
-                            {s.note || '—'}
-                          </td>
-                          <td className="py-1 px-2.5 whitespace-nowrap">
-                            <PriceDisplay amount={s.amount} symbol={currency} />
-                          </td>
-                        </tr>
-                      ))}
-                      <tr className="bg-[#efeadc] font-bold">
-                        <td className="py-1 px-2 border-r border-[#d2d0ce] text-center text-[#8c8878] bg-[#f3f2f1]">
-                          {sortedSales.length + 3}
-                        </td>
-                        <td className="py-1 px-2.5 border-r border-[#d2d0ce]">TOTAL SALES</td>
-                        <td className="py-1 px-2.5 border-r border-[#d2d0ce]">
-                          {sortedSales.length} Sales
-                        </td>
-                        <td className="py-1 px-2.5 border-r border-[#d2d0ce]"></td>
-                        <td className="py-1 px-2.5 whitespace-nowrap">
-                          <PriceDisplay amount={totalSalesRevenue} symbol={currency} />
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                )}
-              </div>
-
-              {/* Simulated Excel Bottom Sheet Tabs */}
-              <div className="bg-[#f3f2f1] border-t border-[#d2d0ce] px-2.5 py-1 flex items-center gap-1.5 text-[11px]">
-                {includeStocks && (
-                  <button
-                    type="button"
-                    onClick={() => setActiveSlide(0)}
-                    className={`px-2.5 py-1 rounded-t border-b-2 transition-colors ${
-                      currentSlideType === 'stocks'
-                        ? 'bg-white text-[#217346] border-[#217346] shadow-2xs'
-                        : 'text-[#56534a] border-transparent hover:bg-white/60'
-                    }`}
-                  >
-                    Available Stocks
-                  </button>
-                )}
-                {includePurchaseHistory && (
-                  <button
-                    type="button"
-                    onClick={() => setActiveSlide(includeStocks ? 1 : 0)}
-                    className={`px-2.5 py-1 rounded-t border-b-2 transition-colors ${
-                      currentSlideType === 'sales'
-                        ? 'bg-white text-[#217346] border-[#217346] shadow-2xs'
-                        : 'text-[#56534a] border-transparent hover:bg-white/60'
-                    }`}
-                  >
-                    Purchase History
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
+            ))}
+          </div>
         </div>
 
         {/* Interactive Swipe Indicator Footer */}
         <div className="flex items-center justify-between text-[11px] text-[#8c8878] pt-0.5">
-          <span>Swipe table or pages with your hand</span>
+          <span>Swipe screen left or right to view next page</span>
           {slides.length > 1 && (
             <div className="flex items-center gap-1.5">
               {slides.map((sl, i) => (

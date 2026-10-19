@@ -1,4 +1,151 @@
 @import "tailwindcss";
-/* All system CSS rules, Calibri Bold typography, custom variables, and animations
-   are now embedded directly inside /index.html (<style id="boutique-system-styles">).
-   Original file backed up in /backup_original/src/index.css */
+
+@layer base {
+  :root {
+    --ink-900: #242119;
+    --ink-800: #34302a;
+    --ink-700: #56534a;
+    --ink-500: #8c8878;
+    --ink-300: #c9c4b4;
+    --accent: #9c8f6f;
+    --accent-dark: #7c7156;
+    --accent-tint: #efeadc;
+    --cream-50: #faf8f4;
+    --cream-100: #f2efe6;
+    --paper: #ffffff;
+    --line: #e7e2d4;
+    --line-soft: #f0ece0;
+    --success: #57795c;
+    --success-bg: #eef2ec;
+    --warn: #9c793c;
+    --warn-bg: #f6f0e1;
+    --danger: #a05539;
+    --danger-bg: #f8ede5;
+  }
+
+  body,
+  button,
+  input,
+  select,
+  textarea,
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  p,
+  span,
+  div,
+  label,
+  th,
+  td,
+  .font-sans,
+  .font-serif,
+  .font-mono {
+    font-family: 'Calibri', 'Candara', 'Segoe UI', 'Optima', Arial, sans-serif !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.01em;
+  }
+
+  body {
+    background-color: #faf8f4;
+    color: #242119;
+    -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@keyframes bounceShort {
+  0%, 100% {
+    transform: translate(-50%, 0);
+  }
+  50% {
+    transform: translate(-50%, -4px);
+  }
+}
+
+.animate-bounce-short {
+  animation: bounceShort 0.3s ease-out;
+}
+
+@keyframes menuFadeSlide {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.995);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-menu-transition {
+  animation: menuFadeSlide 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: opacity, transform;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: opacity;
+}
+
+@keyframes scaleUp {
+  0% {
+    opacity: 0;
+    transform: scale(0.94) translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-scaleUp {
+  animation: scaleUp 0.26s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: opacity, transform;
+}
+
+/* Hide default spin buttons on number inputs globally across all browsers */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* Hide all scrollbars globally across the whole app for native mobile app feel */
+html,
+body,
+#root,
+* {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+}
+
+/* Mobile viewport and tap improvements */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .pb-safe {
+    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
+  }
+}
+

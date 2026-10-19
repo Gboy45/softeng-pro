@@ -291,30 +291,6 @@ export const AccountsView: React.FC = () => {
           )}
         </div>
       </div>
-
-      {/* Option B: HTML System Export & Original Files Backup Status */}
-      <div className="p-4 sm:p-5 bg-white border border-[#e7e2d4] rounded-2xl shadow-xs space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div>
-            <h3 className="font-serif text-base font-bold text-[#1b1915] flex items-center gap-2">
-              <Check className="w-4 h-4 text-[#57795c]" />
-              HTML Architecture (Option B) &amp; Backup
-            </h3>
-            <p className="text-xs text-[#8c8878] mt-0.5">
-              Partially Full HTML mode is active in <code className="text-[#1b1915]">index.html</code>. Full original files are safely backed up in <code className="text-[#1b1915]">/backup_original/</code>.
-            </p>
-          </div>
-          <a
-            href="/perfume-inventory-system.html"
-            download="perfume-inventory-system.html"
-            onClick={() => showToast('Downloading runnable HTML system file...')}
-            className="px-3.5 py-2 text-xs font-bold bg-[#242119] hover:bg-[#34302a] text-white rounded-xl inline-flex items-center gap-1.5 transition-colors self-start sm:self-auto shrink-0"
-          >
-            Download Runnable HTML (.html)
-          </a>
-        </div>
-      </div>
     </div>
   );
 };
-

@@ -80,7 +80,7 @@ export const LoginScreen: React.FC = () => {
             type="submit"
             className="w-full py-3 px-4 bg-[#242119] hover:bg-[#34302a] active:scale-[0.99] text-white font-bold text-sm rounded-xl flex items-center justify-center gap-2 transition-all shadow-xs"
           >
-            <span>Sign In to Mobile App</span>
+            <span>Sign In</span>
             <ArrowRight className="w-4 h-4 text-[#9c8f6f]" />
           </button>
         </form>
