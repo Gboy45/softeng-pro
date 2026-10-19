@@ -124,9 +124,6 @@ export const AddItemModal: React.FC = () => {
             </div>
             <div>
               <h3 className="font-serif text-lg font-bold text-[#1b1915]">Add Perfume Item</h3>
-              <p className="text-[11px] text-[#8c826e] uppercase tracking-wider font-semibold">
-                Auto-Name Detection from Barcode
-              </p>
             </div>
           </div>
           <button
@@ -140,48 +137,28 @@ export const AddItemModal: React.FC = () => {
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
-          {/* Barcode First: Auto-inputs Fragrance Name */}
-          <div className="p-3.5 bg-[#faf8f4] border border-[#e7e2d4] rounded-xl space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="block text-xs font-bold uppercase tracking-wider text-[#1b1915] flex items-center gap-1.5">
-                <Barcode className="w-4 h-4 text-[#7c7156]" />
-                <span>Barcode (Auto-inputs Name)</span>
-              </label>
-              {isLookingUp ? (
-                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#7c7156] bg-[#efeadc] px-2 py-0.5 rounded-full animate-pulse">
-                  <Sparkles className="w-3 h-3 text-[#7c7156]" /> Auto-detecting name...
-                </span>
-              ) : isAutoFilled ? (
-                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#57795c] bg-[#eef2ec] px-2 py-0.5 rounded-full animate-fadeIn">
-                  <Check className="w-3 h-3" /> Name auto-inputted from barcode
-                </span>
-              ) : null}
-            </div>
+          {/* Barcode */}
+          <div className="space-y-1">
+            <label className="block text-xs font-bold uppercase tracking-wider text-[#1b1915] flex items-center gap-1.5">
+              <Barcode className="w-4 h-4 text-[#7c7156]" />
+              <span>Barcode (Max 13 Digits)</span>
+            </label>
             <input
               type="text"
+              inputMode="numeric"
               maxLength={13}
               value={barcode}
               onChange={(e) => setBarcode(e.target.value.replace(/\D/g, ''))}
               placeholder="Scan or enter barcode (e.g. 3508441104665)..."
-              className="w-full px-3.5 py-2.5 bg-white border border-[#e7e2d4] rounded-xl text-sm font-mono text-[#1b1915] focus:outline-none focus:ring-2 focus:ring-[#9c8f6f]"
+              className="w-full px-3.5 py-2.5 bg-[#faf8f4] border border-[#e7e2d4] rounded-xl text-sm font-mono text-[#1b1915] focus:outline-none focus:ring-2 focus:ring-[#9c8f6f]"
             />
-            <p className="text-[11px] text-[#8c8878]">
-              Tip: Enter or scan any barcode to automatically auto-input the perfume name!
-            </p>
           </div>
 
-          {/* Fragrance Name (Auto-inputted from barcode) */}
+          {/* Fragrance Name */}
           <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <label className="block text-xs font-bold uppercase tracking-wider text-[#56534a]">
-                Fragrance Name <span className="text-[#a05539]">*</span>
-              </label>
-              {isAutoFilled && (
-                <span className="text-[10px] font-semibold text-[#57795c] flex items-center gap-1">
-                  <Sparkles className="w-3 h-3" /> Auto-inputted from barcode
-                </span>
-              )}
-            </div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-[#56534a]">
+              Fragrance Name <span className="text-[#a05539]">*</span>
+            </label>
             <input
               type="text"
               required
@@ -190,7 +167,7 @@ export const AddItemModal: React.FC = () => {
                 setName(e.target.value);
                 setNameError(null);
               }}
-              placeholder="Auto-filled from barcode"
+              placeholder="e.g. Baccarat Rouge 540, Aventus"
               className={`w-full px-3.5 py-2.5 bg-white border rounded-xl text-sm font-serif font-bold text-[#1b1915] focus:outline-none focus:ring-2 ${
                 nameError ? 'border-[#a05539] ring-[#a05539]/20' : 'border-[#e7e2d4] ring-[#9c8f6f]'
               }`}
@@ -259,10 +236,10 @@ export const AddItemModal: React.FC = () => {
               </select>
             </div>
 
-            {/* Gender Audience */}
+            {/* Gender */}
             <div className="space-y-1">
               <label className="block text-xs font-bold uppercase tracking-wider text-[#56534a]">
-                Audience / Line
+                Gender
               </label>
               <select
                 value={gender}
@@ -270,8 +247,8 @@ export const AddItemModal: React.FC = () => {
                 className="w-full px-3.5 py-2.5 bg-white border border-[#e7e2d4] rounded-xl text-sm text-[#1b1915]"
               >
                 <option value="Unisex">Unisex</option>
-                <option value="For Women">For Women</option>
-                <option value="For Men">For Men</option>
+                <option value="Women">Women</option>
+                <option value="Men">Men</option>
               </select>
             </div>
 

@@ -87,20 +87,20 @@ export const ItemEditModal: React.FC = () => {
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn overflow-y-auto"
     >
-      <div className="w-full max-w-md bg-white rounded-2xl border border-[#e7e2d4] shadow-2xl overflow-hidden my-auto animate-scaleUp">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#e7e2d4] bg-[#faf8f4]">
+      <div className="w-full max-w-md bg-white rounded-2xl border border-[#e7e2d4] shadow-2xl overflow-hidden my-auto animate-scaleUp max-h-[92vh] flex flex-col">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#e7e2d4] bg-[#faf8f4] shrink-0">
           <h3 className="font-serif text-lg font-bold text-[#242119]">Edit Item Details</h3>
           <button
             onClick={() => setEditingItem(null)}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-[#56534a] hover:bg-[#f2efe6]"
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-[#56534a] hover:bg-[#f2efe6] transition-colors"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-3.5 max-h-[80vh] overflow-y-auto">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-5 space-y-3.5 overflow-y-auto flex-1">
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-[#56534a] mb-1">
               Product Name
@@ -175,16 +175,33 @@ export const ItemEditModal: React.FC = () => {
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-[#56534a] mb-1">
-              Shelf Location
-            </label>
-            <input
-              type="text"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              className="w-full px-3 py-2 bg-white border border-[#e7e2d4] rounded-lg text-sm text-[#242119]"
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-[#56534a] mb-1">
+                Gender
+              </label>
+              <select
+                value={gender}
+                onChange={(e) => setGender(e.target.value)}
+                className="w-full px-3 py-2 bg-white border border-[#e7e2d4] rounded-lg text-sm text-[#242119]"
+              >
+                <option value="Unisex">Unisex</option>
+                <option value="Women">Women</option>
+                <option value="Men">Men</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-[#56534a] mb-1">
+                Shelf Location
+              </label>
+              <input
+                type="text"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                className="w-full px-3 py-2 bg-white border border-[#e7e2d4] rounded-lg text-sm text-[#242119]"
+              />
+            </div>
           </div>
 
           {/* Barcode field with 13 digits limit & admin-only editing */}
@@ -226,17 +243,17 @@ export const ItemEditModal: React.FC = () => {
 
           {error && <p className="text-xs text-[#a05539] font-medium">{error}</p>}
 
-          <div className="flex gap-2.5 pt-3 border-t border-[#e7e2d4]">
+          <div className="flex gap-2.5 pt-3 border-t border-[#e7e2d4] shrink-0">
             <button
               type="button"
               onClick={() => setEditingItem(null)}
-              className="flex-1 py-2 text-xs font-semibold border border-[#e7e2d4] rounded-lg text-[#56534a]"
+              className="flex-1 py-2.5 text-xs font-semibold border border-[#e7e2d4] rounded-xl text-[#56534a] hover:bg-[#f2efe6] transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-1 py-2 text-xs font-semibold bg-[#242119] text-white rounded-lg hover:bg-[#34302a]"
+              className="flex-1 py-2.5 text-xs font-semibold bg-[#242119] text-white rounded-xl hover:bg-[#34302a] transition-colors shadow-xs"
             >
               Save Changes
             </button>

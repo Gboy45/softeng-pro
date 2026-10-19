@@ -43,6 +43,7 @@ export type ActiveTab =
   | 'scan'
   | 'sales'
   | 'reports'
+  | 'accounts'
   | 'staff'
   | 'settings';
 

@@ -10,7 +10,6 @@ import {
   Upload,
   RefreshCw,
   Sparkles,
-  SwitchCamera,
   X,
   Layers,
 } from 'lucide-react';
@@ -72,7 +71,6 @@ export const ScanView: React.FC = () => {
   const streamRef = useRef<MediaStream | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isCameraActive, setIsCameraActive] = useState<boolean>(false);
-  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
 
   const scanLoopRef = useRef<number | null>(null);
   const isProcessingRef = useRef<boolean>(false);
@@ -293,10 +291,10 @@ export const ScanView: React.FC = () => {
 
       let stream: MediaStream;
       try {
-        // Try optimal constraints
+        // Try optimal rear environment camera constraints for barcode scanning
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
-            facingMode: facingMode === 'user' ? 'user' : { ideal: 'environment' },
+            facingMode: { ideal: 'environment' },
             width: { ideal: 1280 },
           },
           audio: false,
@@ -334,12 +332,7 @@ export const ScanView: React.FC = () => {
       setCameraError('Camera unavailable or permission denied. You can upload a photo or use manual barcode entry.');
       setIsCameraActive(false);
     }
-  }, [facingMode]);
-
-  // Camera switch toggle (back / front)
-  const toggleCameraFacing = () => {
-    setFacingMode((prev) => (prev === 'environment' ? 'user' : 'environment'));
-  };
+  }, []);
 
   // Run camera lifecycle and scan loop
   useEffect(() => {
@@ -487,9 +480,6 @@ export const ScanView: React.FC = () => {
     <div className="space-y-5 max-w-2xl mx-auto pb-20 md:pb-6">
       {/* View Header */}
       <div>
-        <span className="text-xs font-bold uppercase tracking-widest text-[#7c7156]">
-          Stock Scanner
-        </span>
         <h2 className="font-serif text-2xl font-bold text-[#242119]">
           Scan Barcode
         </h2>
@@ -537,14 +527,6 @@ export const ScanView: React.FC = () => {
 
           {/* Camera Controls Overlay */}
           <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5 z-10">
-            <button
-              type="button"
-              onClick={toggleCameraFacing}
-              title="Switch Camera (Front/Back)"
-              className="p-2 rounded-lg bg-black/60 text-white hover:bg-black/80 transition-colors"
-            >
-              <SwitchCamera className="w-4 h-4" />
-            </button>
             <button
               type="button"
               onClick={startCamera}
@@ -810,13 +792,12 @@ export const ScanView: React.FC = () => {
               {isLookingUp ? (
                 <div className="text-xs text-[#7c7156] flex items-center justify-center gap-1.5 py-1">
                   <Sparkles className="w-3.5 h-3.5 animate-spin" />
-                  <span>Auto-detecting fragrance name from barcode...</span>
+                  <span>Looking up product details...</span>
                 </div>
               ) : newProductName ? (
                 <div className="p-3 bg-[#faf8f4] border border-[#e7e2d4] rounded-xl text-left space-y-1 animate-fadeIn">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#7c7156] flex items-center gap-1">
-                    <Sparkles className="w-3 h-3 text-[#9c8f6f]" />
-                    <span>Auto-Detected Fragrance Name</span>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#7c7156]">
+                    Suggested Details
                   </div>
                   <div className="font-serif font-bold text-sm text-[#1b1915]">{newProductName}</div>
                   <div className="text-xs text-[#56534a]">
@@ -887,16 +868,11 @@ export const ScanView: React.FC = () => {
                 </span>
               </div>
 
-              {/* Product Name (Auto-inputted from barcode) */}
+              {/* Product Name */}
               <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <label className="block text-xs font-bold uppercase tracking-wider text-[#56534a]">
-                    Fragrance Name <span className="text-[#a05539]">*</span>
-                  </label>
-                  <span className="text-[10px] font-semibold text-[#57795c] flex items-center gap-1">
-                    <Sparkles className="w-3 h-3" /> Auto-inputted from barcode
-                  </span>
-                </div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-[#56534a]">
+                  Fragrance Name <span className="text-[#a05539]">*</span>
+                </label>
                 <input
                   type="text"
                   required
@@ -905,7 +881,7 @@ export const ScanView: React.FC = () => {
                     setNewProductName(e.target.value);
                     setNameError(null);
                   }}
-                  placeholder="Fragrance name auto-filled from barcode"
+                  placeholder="e.g. Bleu de Chanel, Aventus"
                   className={`w-full px-3 py-2 bg-white border rounded-xl text-sm font-serif font-bold text-[#242119] focus:outline-none focus:ring-2 ${
                     nameError ? 'border-[#a05539] ring-[#a05539]/20' : 'border-[#e7e2d4] ring-[#9c8f6f]'
                   }`}
@@ -987,18 +963,36 @@ export const ScanView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Shelf Location */}
-              <div className="space-y-1">
-                <label className="block text-xs font-bold uppercase tracking-wider text-[#56534a]">
-                  Shelf Location
-                </label>
-                <input
-                  type="text"
-                  value={newProductLocation}
-                  onChange={(e) => setNewProductLocation(e.target.value)}
-                  placeholder="e.g. Shelf A - Row 1"
-                  className="w-full px-3 py-2 bg-white border border-[#e7e2d4] rounded-xl text-sm text-[#242119]"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                {/* Gender Option */}
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[#56534a]">
+                    Gender
+                  </label>
+                  <select
+                    value={newProductGender}
+                    onChange={(e) => setNewProductGender(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-[#e7e2d4] rounded-xl text-sm text-[#242119] focus:outline-none focus:ring-2 focus:ring-[#9c8f6f]"
+                  >
+                    <option value="Unisex">Unisex</option>
+                    <option value="Women">Women</option>
+                    <option value="Men">Men</option>
+                  </select>
+                </div>
+
+                {/* Shelf Location */}
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[#56534a]">
+                    Shelf Location
+                  </label>
+                  <input
+                    type="text"
+                    value={newProductLocation}
+                    onChange={(e) => setNewProductLocation(e.target.value)}
+                    placeholder="e.g. Shelf A - Row 1"
+                    className="w-full px-3 py-2 bg-white border border-[#e7e2d4] rounded-xl text-sm text-[#242119] focus:outline-none focus:ring-2 focus:ring-[#9c8f6f]"
+                  />
+                </div>
               </div>
 
               {/* Action Buttons */}

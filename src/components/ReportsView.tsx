@@ -238,9 +238,6 @@ export const ReportsView: React.FC = () => {
   return (
     <div className="space-y-6 max-w-3xl pb-16 md:pb-6">
       <div>
-        <span className="text-xs font-bold uppercase tracking-widest text-[#7c7156]">
-          Export & Documentation
-        </span>
         <h2 className="font-serif text-2xl font-bold text-[#242119]">
           Inventory Reports
         </h2>
@@ -288,37 +285,31 @@ export const ReportsView: React.FC = () => {
             <button
               type="button"
               onClick={() => setFileFormat('pdf')}
-              className={`p-3.5 rounded-xl border text-left transition-all flex items-start gap-3 ${
+              className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 ${
                 fileFormat === 'pdf'
                   ? 'border-[#9c8f6f] bg-[#efeadc] text-[#1b1915] shadow-xs'
                   : 'border-[#e7e2d4] bg-white hover:bg-[#faf8f4] text-[#56534a]'
               }`}
             >
-              <div className={`p-2 rounded-lg ${fileFormat === 'pdf' ? 'bg-[#1b1915] text-[#efeadc]' : 'bg-[#faf8f4] text-[#7c7156]'}`}>
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${fileFormat === 'pdf' ? 'bg-[#1b1915] text-[#efeadc]' : 'bg-[#faf8f4] text-[#7c7156]'}`}>
                 <FileText className="w-4 h-4" />
               </div>
-              <div>
-                <div className="font-bold text-xs">PDF Document</div>
-                <div className="text-[11px] text-[#8c826e]">.pdf · Formatted luxury audit</div>
-              </div>
+              <div className="font-bold text-sm text-[#1b1915]">PDF Document</div>
             </button>
 
             <button
               type="button"
               onClick={() => setFileFormat('xlsx')}
-              className={`p-3.5 rounded-xl border text-left transition-all flex items-start gap-3 ${
+              className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 ${
                 fileFormat === 'xlsx'
                   ? 'border-[#9c8f6f] bg-[#efeadc] text-[#1b1915] shadow-xs'
                   : 'border-[#e7e2d4] bg-white hover:bg-[#faf8f4] text-[#56534a]'
               }`}
             >
-              <div className={`p-2 rounded-lg ${fileFormat === 'xlsx' ? 'bg-[#1b1915] text-[#efeadc]' : 'bg-[#faf8f4] text-[#7c7156]'}`}>
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${fileFormat === 'xlsx' ? 'bg-[#1b1915] text-[#efeadc]' : 'bg-[#faf8f4] text-[#7c7156]'}`}>
                 <FileSpreadsheet className="w-4 h-4" />
               </div>
-              <div>
-                <div className="font-bold text-xs">Excel Workbook</div>
-                <div className="text-[11px] text-[#8c826e]">.xlsx · Spreadsheets</div>
-              </div>
+              <div className="font-bold text-sm text-[#1b1915]">Excel Workbook</div>
             </button>
           </div>
         </div>
@@ -341,9 +332,6 @@ export const ReportsView: React.FC = () => {
             <h3 className="font-serif text-base font-bold text-[#242119]">
               Edit Shelf Locations
             </h3>
-            <p className="text-xs text-[#8c8878]">
-              Update aisle and row positions directly from the stock sheet.
-            </p>
           </div>
           <button
             onClick={handleSaveLocations}

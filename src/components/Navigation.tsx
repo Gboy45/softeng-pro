@@ -26,15 +26,14 @@ export const Navigation: React.FC = () => {
     setIsAddItemOpen,
   } = useInventory();
 
-  // Exactly matching the 7 menu items in the screenshots
+  // Boutique menu items (merged Staff and System into Accounts)
   const navItems = [
     { key: 'dashboard' as ActiveTab, label: 'Dashboard', icon: LayoutGrid },
-    { key: 'inventory' as ActiveTab, label: 'Perfume Inventory', icon: Package },
+    { key: 'inventory' as ActiveTab, label: 'Inventory', icon: Package },
     { key: 'scan' as ActiveTab, label: 'Barcode Scanner', icon: ScanLine },
     { key: 'sales' as ActiveTab, label: 'Purchase History', icon: ReceiptText },
     { key: 'reports' as ActiveTab, label: 'Reports & Export', icon: FileText },
-    { key: 'staff' as ActiveTab, label: 'Staff & Accounts', icon: Users },
-    { key: 'settings' as ActiveTab, label: 'System & PIN', icon: Settings },
+    { key: 'accounts' as ActiveTab, label: 'Accounts', icon: Users },
   ];
 
   return (
@@ -48,7 +47,7 @@ export const Navigation: React.FC = () => {
             <BottleLogo size={32} showSubtitle={true} className="px-0.5" />
           </div>
 
-          {/* 7 Nav Items */}
+          {/* 6 Nav Items */}
           <nav className="flex flex-col gap-1.5" aria-label="Main Navigation">
             {navItems.map((item) => {
               const Icon = item.icon;
@@ -87,93 +86,74 @@ export const Navigation: React.FC = () => {
             <span>Add Perfume Item</span>
           </button>
 
-          {/* Active Session Card */}
-          <div className="p-3 bg-white border border-[#e7e2d4] rounded-xl flex items-center justify-between shadow-2xs">
-            <div className="min-w-0 pr-2">
-              <span className="block text-[10px] font-bold uppercase tracking-wider text-[#8c826e] leading-tight">
-                ACTIVE SESSION
-              </span>
-              <div className="text-xs font-bold text-[#1b1915] truncate mt-0.5">
-                {currentUser?.name || 'Boutique Director'}
-              </div>
-              <div className="text-[10px] font-semibold uppercase text-[#8c826e] tracking-tight">
-                {currentUser?.role === 'admin' ? 'DIRECTOR (ADMIN)' : 'BOUTIQUE PERSONNEL'}
-              </div>
+          {/* Sleek bottom status & quick logout (Active session card relocated to Accounts view) */}
+          <div className="flex items-center justify-between px-1 text-xs text-[#56534a]">
+            <div className="flex items-center gap-1.5 text-[11px]">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#57795c] animate-pulse" />
+              <span>Storage synced</span>
             </div>
-
-            <div className="flex items-center gap-1">
-              <div className="w-7 h-7 rounded-lg bg-[#faf8f4] flex items-center justify-center text-[#8c826e]">
-                <UserCheck className="w-3.5 h-3.5" />
-              </div>
-              <button
-                onClick={logout}
-                title="Log Out"
-                aria-label="Log Out"
-                className="p-1 text-[#8c826e] hover:text-[#a05539] hover:bg-[#f8ede5] rounded-md transition-colors"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-
-          {/* Sync Status Line */}
-          <div className="flex items-center gap-1.5 px-1 text-[11px] text-[#56534a]">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#57795c] animate-pulse" />
-            <span>Persistent client storage synced</span>
+            <button
+              onClick={logout}
+              title="Log Out"
+              className="flex items-center gap-1 text-xs font-semibold text-[#8c8878] hover:text-[#a05539] transition-colors"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Logout</span>
+            </button>
           </div>
         </div>
       </aside>
 
-      {/* Mobile Topbar */}
-      <header className="md:hidden sticky top-0 z-30 flex items-center justify-between px-4 py-3 bg-[#faf8f4] border-b border-[#e7e2d4]">
-        <BottleLogo size={28} showSubtitle={false} />
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setIsAddItemOpen(true)}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#1b1915] text-white text-xs font-semibold shadow-xs"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Add</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('scan')}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold shadow-xs transition-colors ${
-              activeTab === 'scan' ? 'bg-[#9c8f6f] text-white' : 'bg-[#faf8f4] border border-[#e7e2d4] text-[#1b1915]'
-            }`}
-          >
-            <Camera className="w-3.5 h-3.5" />
-            <span>Scan</span>
-          </button>
-        </div>
+      {/* Mobile Topbar - Thinner, sleek header without SCANNER & STOCK LOG */}
+      <header className="md:hidden sticky top-0 z-30 flex items-center justify-center px-4 py-2 bg-[#faf8f4] border-b border-[#e7e2d4]">
+        <BottleLogo size={24} showSubtitle={false} layout="horizontal" />
       </header>
 
-      {/* Mobile Bottom Navigation Bar (Scrollable horizontally for all 7 items) */}
+      {/* Mobile Bottom Navigation Bar - Thinner, sleek non-bulky layout with dividing lines */}
       <nav
-        className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-[#e7e2d4] px-2 py-1.5 flex justify-between items-center shadow-lg overflow-x-auto gap-1"
+        className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-[#e7e2d4] pb-safe flex items-stretch shadow-md"
         aria-label="Mobile Navigation"
       >
         {navItems.map((item) => {
           const Icon = item.icon;
-          const isActive = activeTab === item.key;
+          const isActive =
+            activeTab === item.key ||
+            (item.key === 'accounts' && (activeTab === 'staff' || activeTab === 'settings'));
+
+          const displayLabel =
+            item.key === 'inventory'
+              ? 'Inventory'
+              : item.key === 'scan'
+              ? 'Scan'
+              : item.key === 'sales'
+              ? 'Sales'
+              : item.key === 'reports'
+              ? 'Reports'
+              : item.key === 'accounts'
+              ? 'Accounts'
+              : item.label;
 
           return (
             <button
               key={item.key}
               onClick={() => setActiveTab(item.key)}
-              className={`flex-1 min-w-[54px] flex flex-col items-center justify-center py-1 px-1 rounded-lg transition-colors ${
-                isActive ? 'text-[#1b1915]' : 'text-[#8c826e]'
+              className={`flex-1 flex flex-col items-center justify-center py-1.5 px-0.5 min-h-[50px] transition-colors border-r border-[#e7e2d4] last:border-r-0 ${
+                isActive ? 'bg-[#faf8f4] text-[#1b1915]' : 'bg-white text-[#7c7156] hover:bg-[#faf8f4]'
               }`}
             >
               <div
-                className={`p-1 rounded-md ${
+                className={`p-1 rounded-md transition-transform ${
                   isActive ? 'bg-[#efeadc] text-[#1b1915]' : ''
                 }`}
               >
-                <Icon className="w-4 h-4" />
+                <Icon className="w-4 h-4 shrink-0" />
               </div>
-              <span className={`text-[9px] mt-0.5 truncate text-center leading-tight ${isActive ? 'font-bold' : 'font-medium'}`}>
-                {item.label.split(' ')[0]}
+              <span
+                className={`text-[9.5px] mt-0.5 truncate text-center leading-tight tracking-tight ${
+                  isActive ? 'font-bold text-[#1b1915]' : 'font-medium text-[#7c7156]'
+                }`}
+              >
+                {displayLabel}
               </span>
             </button>
           );

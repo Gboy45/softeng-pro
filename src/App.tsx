@@ -6,13 +6,11 @@ import { InventoryView } from './components/InventoryView.js';
 import { ScanView } from './components/ScanView.js';
 import { ReportsView } from './components/ReportsView.js';
 import { PurchaseHistoryView } from './components/PurchaseHistoryView.js';
-import { StaffView } from './components/StaffView.js';
-import { SettingsView } from './components/SettingsView.js';
+import { AccountsView } from './components/AccountsView.js';
 import { ItemEditModal } from './components/ItemEditModal.js';
 import { AddItemModal } from './components/AddItemModal.js';
 import { RecordSaleModal } from './components/RecordSaleModal.js';
 import { LoginScreen } from './components/LoginScreen.js';
-import { Camera } from 'lucide-react';
 
 const AppContent: React.FC = () => {
   const {
@@ -33,28 +31,18 @@ const AppContent: React.FC = () => {
       <Navigation />
 
       {/* Main View Area with Smooth Menu Transitions */}
-      <main className="flex-1 max-w-6xl mx-auto w-full p-4 sm:p-6 lg:p-8 overflow-y-auto">
+      <main className="flex-1 max-w-6xl mx-auto w-full p-4 sm:p-6 lg:p-8 overflow-y-auto no-scrollbar">
         <div key={activeTab} className="animate-menu-transition">
           {activeTab === 'dashboard' && <DashboardView />}
           {activeTab === 'inventory' && <InventoryView />}
           {activeTab === 'scan' && <ScanView />}
           {activeTab === 'sales' && <PurchaseHistoryView />}
           {activeTab === 'reports' && <ReportsView />}
-          {activeTab === 'staff' && <StaffView />}
-          {activeTab === 'settings' && <SettingsView />}
+          {(activeTab === 'accounts' || activeTab === 'staff' || activeTab === 'settings') && (
+            <AccountsView />
+          )}
         </div>
       </main>
-
-      {/* Floating Action Button (FAB) on Mobile for One-Tap Scan View */}
-      {activeTab !== 'scan' && (
-        <button
-          onClick={() => setActiveTab('scan')}
-          aria-label="Go to Barcode Scanner"
-          className="md:hidden fixed right-4 bottom-20 z-30 w-12 h-12 rounded-full bg-[#1b1915] text-white flex items-center justify-center shadow-xl active:scale-95 transition-transform"
-        >
-          <Camera className="w-5 h-5 text-[#efeadc]" />
-        </button>
-      )}
 
       {/* Modals */}
       <ItemEditModal />

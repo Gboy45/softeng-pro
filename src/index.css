@@ -100,13 +100,37 @@
   will-change: opacity, transform;
 }
 
-/* Hide default spin buttons on number inputs when custom steppers are used */
-input[type="number"].hide-steppers::-webkit-inner-spin-button,
-input[type="number"].hide-steppers::-webkit-outer-spin-button {
+/* Hide default spin buttons on number inputs globally across all browsers */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
-input[type="number"].hide-steppers {
+input[type="number"] {
   -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* Hide all scrollbars globally across the whole app for native mobile app feel */
+html,
+body,
+#root,
+* {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+}
+
+/* Mobile viewport and tap improvements */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .pb-safe {
+    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
+  }
 }
 

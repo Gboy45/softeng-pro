@@ -60,9 +60,6 @@ export const SettingsView: React.FC = () => {
         <h1 className="font-serif text-2xl sm:text-3xl lg:text-4xl font-bold text-[#1b1915] mt-1 tracking-tight">
           System &amp; PIN
         </h1>
-        <p className="text-xs sm:text-sm text-[#56534a] mt-0.5">
-          Configure security protections, currency standards, and local storage caches.
-        </p>
       </div>
 
       {/* Currency Standard: Philippines Boutique Standard (Only Peso) */}
@@ -76,9 +73,6 @@ export const SettingsView: React.FC = () => {
             <Check className="w-3.5 h-3.5" /> Philippines (₱ Only)
           </span>
         </div>
-        <p className="text-xs text-[#56534a]">
-          Configured strictly for retail boutique operations in the Philippines. All fragrance prices, transaction ledgers, inventory valuations, and receipt logs exclusively use Philippine Peso (₱).
-        </p>
         <div className="p-4 rounded-xl border border-[#9c8f6f] bg-[#efeadc] text-[#1b1915] flex items-center justify-between shadow-2xs">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-[#1b1915] text-white flex items-center justify-center font-bold font-sans text-xl shadow-xs">

@@ -23,25 +23,10 @@ export const StaffView: React.FC = () => {
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#8c826e] block">
-            BOUTIQUE ADMINISTRATION
-          </span>
           <h1 className="font-serif text-2xl sm:text-3xl lg:text-4xl font-bold text-[#1b1915] mt-1 tracking-tight">
-            Staff &amp; Accounts
+            Accounts
           </h1>
-          <p className="text-xs sm:text-sm text-[#56534a] mt-0.5">
-            Manage boutique staff roles, authentication privileges, and team rosters.
-          </p>
         </div>
-
-        {/* Add Personnel Button */}
-        <button
-          onClick={() => setIsAddOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#1b1915] hover:bg-[#34302a] text-white text-xs font-semibold shadow-xs transition-colors self-start sm:self-auto"
-        >
-          <UserPlus className="w-4 h-4" />
-          <span>Add Personnel</span>
-        </button>
       </div>
 
       {/* Staff Members List */}
