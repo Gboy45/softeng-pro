@@ -2,19 +2,315 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
     <title>Retail Mobile Inventory Scanner</title>
-    <meta name="description" content="Mobile inventory app for retail businesses with real-time cloud database sync, barcode camera scanner, and smart stock replenishment popups." />
+    <meta
+      name="description"
+      content="Mobile inventory app for retail businesses with real-time cloud database sync, barcode camera scanner, and smart stock replenishment popups."
+    />
     <meta property="og:title" content="Retail Mobile Inventory Scanner" />
-    <meta property="og:description" content="Mobile inventory app for retail businesses with real-time cloud database sync, barcode camera scanner, and smart stock replenishment popups." />
+    <meta
+      property="og:description"
+      content="Mobile inventory app for retail businesses with real-time cloud database sync, barcode camera scanner, and smart stock replenishment popups."
+    />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- ============================================================================
+         OPTION B: PARTIALLY FULL HTML ARCHITECTURE — EMBEDDED SYSTEM STYLESHEET
+         All system typography (Calibri Bold), color tokens, keyframe animations,
+         input number spinner suppression, and scrollbar-free touch-swipe rules
+         are embedded directly in index.html.
+         Original files backup is stored safely in /backup_original/
+         ============================================================================ -->
+    <style id="boutique-system-styles">
+      :root {
+        --ink-900: #242119;
+        --ink-800: #34302a;
+        --ink-700: #56534a;
+        --ink-500: #8c8878;
+        --ink-300: #c9c4b4;
+        --accent: #9c8f6f;
+        --accent-dark: #7c7156;
+        --accent-tint: #efeadc;
+        --cream-50: #faf8f4;
+        --cream-100: #f2efe6;
+        --paper: #ffffff;
+        --line: #e7e2d4;
+        --line-soft: #f0ece0;
+        --success: #57795c;
+        --success-bg: #eef2ec;
+        --warn: #9c793c;
+        --warn-bg: #f6f0e1;
+        --danger: #a05539;
+        --danger-bg: #f8ede5;
+      }
+
+      /* System-Wide Calibri Bold Typography */
+      body,
+      button,
+      input,
+      select,
+      textarea,
+      h1,
+      h2,
+      h3,
+      h4,
+      h5,
+      h6,
+      p,
+      span,
+      div,
+      label,
+      th,
+      td,
+      .font-sans,
+      .font-serif,
+      .font-mono {
+        font-family: 'Calibri', 'Candara', 'Segoe UI', 'Optima', Arial, sans-serif !important;
+        font-weight: 700 !important;
+        letter-spacing: 0.01em;
+      }
+
+      body {
+        background-color: #faf8f4;
+        color: #242119;
+        margin: 0;
+        padding: 0;
+        -webkit-font-smoothing: antialiased;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      @keyframes bounceShort {
+        0%,
+        100% {
+          transform: translate(-50%, 0);
+        }
+        50% {
+          transform: translate(-50%, -4px);
+        }
+      }
+
+      .animate-bounce-short {
+        animation: bounceShort 0.3s ease-out;
+      }
+
+      @keyframes menuFadeSlide {
+        0% {
+          opacity: 0;
+          transform: translateY(10px) scale(0.995);
+        }
+        100% {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+
+      .animate-menu-transition {
+        animation: menuFadeSlide 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        will-change: opacity, transform;
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+
+      .animate-fadeIn {
+        animation: fadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        will-change: opacity;
+      }
+
+      @keyframes scaleUp {
+        0% {
+          opacity: 0;
+          transform: scale(0.94) translateY(6px);
+        }
+        100% {
+          opacity: 1;
+          transform: scale(1) translateY(0);
+        }
+      }
+
+      .animate-scaleUp {
+        animation: scaleUp 0.26s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        will-change: opacity, transform;
+      }
+
+      /* Hide default spin buttons on number inputs globally across all browsers */
+      input[type='number']::-webkit-inner-spin-button,
+      input[type='number']::-webkit-outer-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+      input[type='number'] {
+        -moz-appearance: textfield;
+        appearance: textfield;
+      }
+
+      /* Hide all scrollbars globally across the whole app for native mobile app feel */
+      html,
+      body,
+      #root,
+      * {
+        scrollbar-width: none !important;
+        -ms-overflow-style: none !important;
+      }
+
+      ::-webkit-scrollbar {
+        display: none !important;
+        width: 0 !important;
+        height: 0 !important;
+        background: transparent !important;
+      }
+
+      /* Mobile viewport and tap improvements */
+      @supports (padding-bottom: env(safe-area-inset-bottom)) {
+        .pb-safe {
+          padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
+        }
+      }
+    </style>
   </head>
   <body>
+    <!-- Primary Application Root -->
     <div id="root"></div>
+
+    <!-- ============================================================================
+         PARTIALLY FULL HTML MODULE TEMPLATES & STRUCTURE DEFINITIONS
+         Contains the semantic HTML blueprints for all 6 Perfume Inventory modules
+         (Login, Dashboard, Inventory + Admin Password Delete Confirmation,
+         Multi-Pass Camera Scanner + Manual ADD, Sales & Purchase History,
+         Reports with Hand-Swipeable PDF/Excel Overview, and Settings with
+         Director Security PIN lock).
+         ============================================================================ -->
+    <template id="html-module-login">
+      <section data-module="login-screen" class="min-h-screen bg-[#faf8f4] flex items-center justify-center p-4">
+        <div class="w-full max-w-md bg-white border border-[#e7e2d4] rounded-3xl p-6 sm:p-8 shadow-sm">
+          <header data-brand="Perfume Inventory"></header>
+          <form data-form="credentials">
+            <input type="text" name="username" placeholder="Username" autocomplete="username" />
+            <input type="password" name="password" placeholder="••••••••" autocomplete="current-password" />
+            <button type="submit">Sign In to Boutique</button>
+          </form>
+        </div>
+      </section>
+    </template>
+
+    <template id="html-module-navigation">
+      <nav data-module="navigation-shell" aria-label="Boutique Navigation">
+        <ul data-views="phone-tablet-desktop-synced">
+          <li data-tab="dashboard">Dashboard</li>
+          <li data-tab="inventory">Inventory</li>
+          <li data-tab="scan">Scanner</li>
+          <li data-tab="sales">Sales</li>
+          <li data-tab="reports">Reports</li>
+          <li data-tab="settings" data-icon="gear">Settings</li>
+        </ul>
+      </nav>
+    </template>
+
+    <template id="html-module-dashboard">
+      <section data-module="dashboard-view">
+        <header>
+          <h1>Boutique Overview</h1>
+          <button data-action="record-new-sale">Record Sale</button>
+        </header>
+        <div data-metrics="kpi-grid">
+          <article data-kpi="total-skus">Total SKUs</article>
+          <article data-kpi="total-bottles">Total Bottles in Stock</article>
+          <article data-kpi="inventory-valuation">Total Valuation (₱)</article>
+          <article data-kpi="most-sold-today">Most Sold Item Today</article>
+        </div>
+      </section>
+    </template>
+
+    <template id="html-module-inventory">
+      <section data-module="inventory-view">
+        <header>
+          <h2>Fragrance Catalog</h2>
+          <div data-filters="gender-type-sort">
+            <span data-gender-options="All,Men,Women,Unisex"></span>
+            <span data-sort-options="Name,Stock,Price,Brand (A-Z),Bottle Size (Small to Large)"></span>
+          </div>
+        </header>
+        <!-- Admin Password Confirm Delete Modal Blueprint -->
+        <dialog data-modal="admin-confirm-delete">
+          <h3>Confirm Perfume Deletion</h3>
+          <p>Enter the Administrator Password to permanently remove this fragrance from inventory.</p>
+          <input type="password" name="adminPassword" placeholder="Enter Admin Password" />
+          <div data-actions="cancel-confirm">
+            <button type="button" data-action="cancel">Cancel</button>
+            <button type="submit" data-action="confirm-delete">Confirm Delete</button>
+          </div>
+        </dialog>
+      </section>
+    </template>
+
+    <template id="html-module-scanner">
+      <section data-module="scan-view">
+        <div data-scanner="multi-pass-camera-engine" data-fps="11" data-autofocus="continuous"></div>
+        <form data-form="manual-barcode-entry">
+          <input type="text" maxlength="13" inputmode="numeric" placeholder="Enter 13-digit EAN-13 barcode..." />
+          <button type="submit">ADD</button>
+        </form>
+      </section>
+    </template>
+
+    <template id="html-module-reports">
+      <section data-module="reports-view">
+        <div data-report-options="2-streamlined-checkboxes">
+          <label data-option="available-and-total-stocks">Available &amp; Total Stocks</label>
+          <label data-option="purchase-history">Purchase History</label>
+        </div>
+        <div data-export-formats="pdf-xlsx">
+          <button data-format="pdf">PDF Document (.pdf)</button>
+          <button data-format="xlsx">Excel Workbook (.xlsx)</button>
+        </div>
+        <div data-overview="hand-swipeable-no-scrollbar" data-touch-pan="enabled"></div>
+      </section>
+    </template>
+
+    <template id="html-module-settings">
+      <section data-module="settings-view">
+        <header>
+          <h1>Settings</h1>
+        </header>
+        <div data-card="active-session"></div>
+        <div data-card="accounts-roster"></div>
+        <div data-card="director-security-pin" data-personnel-access="locked-readonly" data-admin-access="editable"></div>
+        <div data-card="persistent-storage-cache"></div>
+      </section>
+    </template>
+
+    <!-- ============================================================================
+         EMBEDDED HTML RUNTIME BRIDGE & STATE SNAPSHOT HELPER
+         Preserves 100% compatibility between index.html, standalone HTML export,
+         and localStorage persistence.
+         ============================================================================ -->
+    <script id="boutique-html-runtime">
+      window.__BOUTIQUE_HTML_MODE__ = {
+        architecture: 'Option B - Partially Full HTML',
+        backupDirectory: '/backup_original',
+        standaloneFile: '/perfume-inventory-system.html',
+        version: '2.0.0-html',
+      };
+    </script>
+
+    <!-- Core Application Entry -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

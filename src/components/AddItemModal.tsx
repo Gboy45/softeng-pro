@@ -18,51 +18,8 @@ export const AddItemModal: React.FC = () => {
   const [price, setPrice] = useState('75.00');
   const [location, setLocation] = useState('Shelf A - Row 1');
 
-  const [isAutoFilled, setIsAutoFilled] = useState(false);
-  const [isLookingUp, setIsLookingUp] = useState(false);
   const [nameError, setNameError] = useState<string | null>(null);
   const [priceError, setPriceError] = useState<string | null>(null);
-
-  // Whenever user inputs or scans a barcode, auto-input the fragrance name and details!
-  useEffect(() => {
-    const clean = barcode.replace(/\D/g, '').trim();
-    if (clean.length >= 3) {
-      setIsLookingUp(true);
-      // Check existing catalog items first
-      const existing = items.find((i) => i.barcode.replace(/\D/g, '') === clean);
-      if (existing) {
-        setName(existing.name);
-        setBrand(existing.brand);
-        setSize(existing.size);
-        setType(existing.type);
-        setGender(existing.gender);
-        setPrice(Number(existing.price).toFixed(2));
-        setIsAutoFilled(true);
-        setNameError(null);
-        setIsLookingUp(false);
-        return;
-      }
-
-      lookupProductDetails(clean).then((res) => {
-        setIsLookingUp(false);
-        if (res?.fields) {
-          if (res.fields.name) setName(res.fields.name);
-          if (res.fields.brand) setBrand(res.fields.brand);
-          if (res.fields.size) setSize(res.fields.size);
-          if (res.fields.type) setType(res.fields.type);
-          if (res.fields.gender) setGender(res.fields.gender);
-          if (res.fields.price) setPrice(res.fields.price.toFixed(2));
-          setIsAutoFilled(true);
-          setNameError(null);
-        }
-      }).catch(() => {
-        setIsLookingUp(false);
-      });
-    } else {
-      setIsAutoFilled(false);
-      setIsLookingUp(false);
-    }
-  }, [barcode, items]);
 
   if (!isAddItemOpen) return null;
 
@@ -104,7 +61,6 @@ export const AddItemModal: React.FC = () => {
     setBrand('');
     setPrice('75.00');
     setStock(10);
-    setIsAutoFilled(false);
     setNameError(null);
     setPriceError(null);
   };

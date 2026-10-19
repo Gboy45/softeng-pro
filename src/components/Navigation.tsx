@@ -26,14 +26,14 @@ export const Navigation: React.FC = () => {
     setIsAddItemOpen,
   } = useInventory();
 
-  // Boutique menu items (merged Staff and System into Accounts)
+  // Boutique menu items synced across phone, tablet, and desktop views
   const navItems = [
     { key: 'dashboard' as ActiveTab, label: 'Dashboard', icon: LayoutGrid },
     { key: 'inventory' as ActiveTab, label: 'Inventory', icon: Package },
-    { key: 'scan' as ActiveTab, label: 'Barcode Scanner', icon: ScanLine },
-    { key: 'sales' as ActiveTab, label: 'Purchase History', icon: ReceiptText },
-    { key: 'reports' as ActiveTab, label: 'Reports & Export', icon: FileText },
-    { key: 'accounts' as ActiveTab, label: 'Accounts', icon: Users },
+    { key: 'scan' as ActiveTab, label: 'Scan', icon: ScanLine },
+    { key: 'sales' as ActiveTab, label: 'Sales', icon: ReceiptText },
+    { key: 'reports' as ActiveTab, label: 'Reports', icon: FileText },
+    { key: 'accounts' as ActiveTab, label: 'Settings', icon: Settings },
   ];
 
   return (
@@ -75,18 +75,8 @@ export const Navigation: React.FC = () => {
           </nav>
         </div>
 
-        {/* Bottom Section: + Add Perfume Item Button & Active Session */}
-        <div className="space-y-3.5 pt-4 border-t border-[#e7e2d4]">
-          {/* Black Pill Button: + Add Perfume Item */}
-          <button
-            onClick={() => setIsAddItemOpen(true)}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#1b1915] hover:bg-[#2d2922] text-white text-xs font-semibold shadow-xs transition-colors"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-[#e7e2d4]" />
-            <span>Add Perfume Item</span>
-          </button>
-
-          {/* Sleek bottom status & quick logout (Active session card relocated to Accounts view) */}
+        {/* Bottom Section: Active Session Status & Logout */}
+        <div className="pt-4 border-t border-[#e7e2d4]">
           <div className="flex items-center justify-between px-1 text-xs text-[#56534a]">
             <div className="flex items-center gap-1.5 text-[11px]">
               <span className="w-1.5 h-1.5 rounded-full bg-[#57795c] animate-pulse" />
@@ -104,7 +94,7 @@ export const Navigation: React.FC = () => {
         </div>
       </aside>
 
-      {/* Mobile Topbar - Thinner, sleek header without SCANNER & STOCK LOG */}
+      {/* Mobile Topbar - Thinner, sleek header */}
       <header className="md:hidden sticky top-0 z-30 flex items-center justify-center px-4 py-2 bg-[#faf8f4] border-b border-[#e7e2d4]">
         <BottleLogo size={24} showSubtitle={false} layout="horizontal" />
       </header>
@@ -130,7 +120,7 @@ export const Navigation: React.FC = () => {
               : item.key === 'reports'
               ? 'Reports'
               : item.key === 'accounts'
-              ? 'Accounts'
+              ? 'Settings'
               : item.label;
 
           return (

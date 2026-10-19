@@ -70,12 +70,7 @@ export const BottleLogo: React.FC<BottleLogoProps> = ({
             Inventory
           </span>
           {showSubtitle && (
-            <>
-              <span className="text-[10px] tracking-[0.24em] uppercase text-[#8c7a5b] font-bold mt-2 font-sans">
-                SCANNER &amp; STOCK LOG
-              </span>
-              <div className="w-12 h-0.5 bg-[#8c7a5b] rounded-full mt-3 opacity-80" />
-            </>
+            <div className="w-12 h-0.5 bg-[#8c7a5b] rounded-full mt-3 opacity-80" />
           )}
         </div>
       </div>
@@ -97,12 +92,6 @@ export const BottleLogo: React.FC<BottleLogoProps> = ({
           </span>
         </div>
       </div>
-
-      {showSubtitle && (
-        <div className="text-[9.5px] sm:text-[10px] tracking-[0.22em] uppercase text-[#8c7a5b] font-bold mt-2 font-sans pl-0.5">
-          SCANNER &amp; STOCK LOG
-        </div>
-      )}
     </div>
   );
 };

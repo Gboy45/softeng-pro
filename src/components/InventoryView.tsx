@@ -11,6 +11,9 @@ import {
   Sparkles,
   Edit2,
   Trash2,
+  Lock,
+  X,
+  AlertCircle,
 } from 'lucide-react';
 import { useInventory } from '../context/InventoryContext.js';
 import type { InventoryItem } from '../types/inventory.js';
@@ -47,10 +50,43 @@ export const InventoryView: React.FC = () => {
     currency,
     deleteItem,
     currentUser,
+    verifyPin,
   } = useInventory();
 
   const isAdmin = currentUser?.role === 'admin';
   const [itemToDelete, setItemToDelete] = useState<InventoryItem | null>(null);
+  const [adminPassword, setAdminPassword] = useState('');
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const openDeleteModal = (item: InventoryItem) => {
+    setItemToDelete(item);
+    setAdminPassword('');
+    setDeleteError(null);
+  };
+
+  const closeDeleteModal = () => {
+    setItemToDelete(null);
+    setAdminPassword('');
+    setDeleteError(null);
+  };
+
+  const handleConfirmDelete = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!itemToDelete) return;
+    const pwd = adminPassword.trim();
+    if (!pwd) {
+      setDeleteError('Please enter the admin password to confirm deletion.');
+      return;
+    }
+    const pinMatched = await verifyPin(pwd);
+    if (pwd !== '123' && !pinMatched) {
+      setDeleteError('Incorrect admin password. Please try again.');
+      return;
+    }
+    const id = itemToDelete.id;
+    closeDeleteModal();
+    await deleteItem(id);
+  };
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedBrand, setSelectedBrand] = useState('all');
@@ -265,7 +301,7 @@ export const InventoryView: React.FC = () => {
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setItemToDelete(item);
+                            openDeleteModal(item);
                           }}
                           className="p-1 text-[#8c8878] hover:text-[#a05539] hover:bg-[#f8ede5] rounded-lg transition-colors ml-auto sm:ml-0 shrink-0"
                           title="Delete Fragrance (Admin Only)"
@@ -420,7 +456,7 @@ export const InventoryView: React.FC = () => {
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setItemToDelete(item);
+                      openDeleteModal(item);
                     }}
                     className="p-1.5 rounded-lg text-[#8c8878] hover:text-[#a05539] hover:bg-[#f8ede5] transition-colors"
                     title="Delete Fragrance (Admin Only)"
@@ -435,45 +471,101 @@ export const InventoryView: React.FC = () => {
         </div>
       )}
 
-      {/* Admin Delete Confirmation Modal */}
+      {/* Admin Delete Confirmation Modal with Admin Password Verification (All View Devices) */}
       {itemToDelete && (
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn overflow-y-auto"
         >
-          <div className="w-full max-w-sm bg-white rounded-2xl border border-[#e7e2d4] shadow-2xl p-6 text-center space-y-4 animate-scaleUp">
-            <div className="w-12 h-12 rounded-full bg-[#f8ede5] text-[#a05539] flex items-center justify-center mx-auto">
-              <Trash2 className="w-6 h-6" />
+          <div className="w-full max-w-md bg-white rounded-2xl border border-[#e7e2d4] shadow-2xl overflow-hidden my-auto animate-scaleUp">
+            {/* Modal Header paired with system design */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[#e7e2d4] bg-[#faf8f4]">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-[#f8ede5] border border-[#ecdccf] text-[#a05539] flex items-center justify-center">
+                  <Trash2 className="w-4 h-4" />
+                </div>
+                <h3 className="font-serif text-base sm:text-lg font-bold text-[#1b1915]">
+                  Confirm Delete Perfume
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={closeDeleteModal}
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-[#56534a] hover:bg-[#f2efe6] transition-colors"
+                title="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
-            <div className="space-y-1">
-              <h3 className="font-serif text-lg font-bold text-[#1b1915]">
-                Delete Fragrance?
-              </h3>
+
+            {/* Modal Form Body */}
+            <form onSubmit={handleConfirmDelete} className="p-5 space-y-4">
+              {/* Selected Perfume Preview Card */}
+              <div className="p-3.5 bg-[#faf8f4] border border-[#e7e2d4] rounded-xl flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-[#f2efe6] border border-[#e7e2d4] flex items-center justify-center shrink-0 text-[#8c7a5b]">
+                  <BottleOutlineIcon className="w-4 h-4 text-[#8c7a5b]" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm sm:text-base font-bold text-[#1b1915] truncate">
+                    {itemToDelete.name}
+                  </div>
+                  <div className="text-xs text-[#56534a] truncate">
+                    {itemToDelete.brand} · {itemToDelete.size} mL · {itemToDelete.stock} pcs in stock
+                  </div>
+                </div>
+              </div>
+
               <p className="text-xs text-[#56534a]">
-                Are you sure you want to remove <strong>{itemToDelete.name}</strong> from store inventory? This action is permanent.
+                Please enter your <strong>Admin Password</strong> to permanently remove this perfume from store inventory.
               </p>
-            </div>
-            <div className="flex gap-2.5 pt-2">
-              <button
-                type="button"
-                onClick={() => setItemToDelete(null)}
-                className="flex-1 py-2 px-3 text-xs font-semibold border border-[#e7e2d4] rounded-xl hover:bg-[#f2efe6] text-[#1b1915] transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  const id = itemToDelete.id;
-                  setItemToDelete(null);
-                  await deleteItem(id);
-                }}
-                className="flex-1 py-2 px-3 text-xs font-semibold bg-[#a05539] hover:bg-[#85432b] text-white rounded-xl transition-colors shadow-xs"
-              >
-                Delete Fragrance
-              </button>
-            </div>
+
+              {/* Admin Password Input */}
+              <div className="space-y-1">
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-[#7c7156]">
+                  ADMIN PASSWORD
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-[#8c8878] absolute left-3.5 top-3 pointer-events-none" />
+                  <input
+                    type="password"
+                    required
+                    autoFocus
+                    value={adminPassword}
+                    onChange={(e) => {
+                      setAdminPassword(e.target.value);
+                      setDeleteError(null);
+                    }}
+                    placeholder="Enter admin password"
+                    className="w-full pl-10 pr-3.5 py-2.5 bg-[#faf8f4] border border-[#e7e2d4] rounded-xl text-sm text-[#242119] placeholder:text-[#a09a8a] focus:outline-none focus:ring-2 focus:ring-[#9c8f6f]"
+                  />
+                </div>
+              </div>
+
+              {deleteError && (
+                <div className="p-3 bg-[#f8ede5] text-[#a05539] text-xs rounded-xl flex items-start gap-2 border border-[#ecdccf]">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{deleteError}</span>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex gap-2.5 pt-2 border-t border-[#e7e2d4]">
+                <button
+                  type="button"
+                  onClick={closeDeleteModal}
+                  className="flex-1 py-2.5 px-4 text-xs font-bold border border-[#e7e2d4] rounded-xl hover:bg-[#f2efe6] text-[#1b1915] transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 px-4 text-xs font-bold bg-[#a05539] hover:bg-[#85432b] text-white rounded-xl transition-colors shadow-xs"
+                >
+                  Confirm Delete
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

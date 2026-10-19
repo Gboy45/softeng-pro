@@ -1,0 +1,38 @@
+ORIGINAL SYSTEM BACKUP MANIFEST
+===============================
+Created: 2026-10-19
+Architecture Selected: Option B (Partially Full HTML Architecture)
+
+This directory (/backup_original/) contains a 100% complete, untouched backup of all original multi-file TypeScript/React source files prior to the Option B HTML transition:
+
+- /backup_original/index.html
+- /backup_original/package.json
+- /backup_original/tsconfig.json
+- /backup_original/vite.config.ts
+- /backup_original/src/App.tsx
+- /backup_original/src/main.tsx
+- /backup_original/src/index.css
+- /backup_original/src/context/InventoryContext.tsx
+- /backup_original/src/types/inventory.ts
+- /backup_original/src/utils/inventoryLogic.ts
+- /backup_original/src/utils/inventoryLogic.test.ts
+- /backup_original/src/utils/lookup.ts
+- /backup_original/src/components/AccountsView.tsx
+- /backup_original/src/components/AddItemModal.tsx
+- /backup_original/src/components/BarcodeScannerModal.tsx
+- /backup_original/src/components/BottleLogo.tsx
+- /backup_original/src/components/DashboardView.tsx
+- /backup_original/src/components/InventoryView.tsx
+- /backup_original/src/components/ItemEditModal.tsx
+- /backup_original/src/components/LoginScreen.tsx
+- /backup_original/src/components/Navigation.tsx
+- /backup_original/src/components/PriceDisplay.tsx
+- /backup_original/src/components/PurchaseHistoryView.tsx
+- /backup_original/src/components/RecordSaleModal.tsx
+- /backup_original/src/components/ReportsView.tsx
+- /backup_original/src/components/ScanView.tsx
+- /backup_original/src/components/SettingsView.tsx
+- /backup_original/src/components/StaffView.tsx
+
+HOW TO RESTORE:
+Simply tell the assistant: "Bring back the original files" and all files from /backup_original/ will be restored immediately.

@@ -499,9 +499,9 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
                       }
                       handleBarcodeDetected(manualInput.trim());
                     }}
-                    className="px-4 py-2 bg-[#9c8f6f] hover:bg-[#7c7156] text-white font-semibold text-xs rounded-lg inline-flex items-center gap-1.5 transition-colors"
+                    className="px-4 py-2 bg-[#9c8f6f] hover:bg-[#7c7156] text-white font-bold text-xs rounded-lg inline-flex items-center gap-1.5 transition-colors"
                   >
-                    <Search className="w-3.5 h-3.5" /> Look Up
+                    <Plus className="w-3.5 h-3.5" /> ADD
                   </button>
                 </div>
                 {manualError && <p className="text-xs text-[#a05539] font-medium">{manualError}</p>}

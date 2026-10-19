@@ -31,13 +31,12 @@ import {
   validatePrice,
   BARCODE_EXACT_LENGTH,
 } from '../utils/inventoryLogic.js';
-import { lookupProductDetails } from '../utils/lookup.js';
 import { PriceDisplay, PesoSign } from './PriceDisplay.js';
 
 type ScanModalType = null | 'existing_item' | 'new_item_confirm' | 'new_item_form';
 
 export const ScanView: React.FC = () => {
-  const { items, addStock, addItem, initialBarcodeForScan, setInitialBarcodeForScan } = useInventory();
+  const { items, addStock, addItem, initialBarcodeForScan, setInitialBarcodeForScan, showToast } = useInventory();
 
   // Pop-up modal state: ONLY 'existing_item' (Add to existing inventory) or 'new_item_confirm'/'new_item_form' (Add to inventory)
   const [modalType, setModalType] = useState<ScanModalType>(null);
@@ -64,7 +63,6 @@ export const ScanView: React.FC = () => {
   const [priceError, setPriceError] = useState<string | null>(null);
   const [manualCode, setManualCode] = useState('');
   const [manualError, setManualError] = useState<string | null>(null);
-  const [isLookingUp, setIsLookingUp] = useState(false);
 
   // Camera stream state
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -75,6 +73,12 @@ export const ScanView: React.FC = () => {
   const scanLoopRef = useRef<number | null>(null);
   const isProcessingRef = useRef<boolean>(false);
   const ignoreUntilRef = useRef<number>(0);
+
+  // Persistent reusable canvases for high-speed multi-pass barcode scanning
+  const cropCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const contrastCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const fullCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const rotCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Native BarcodeDetector instance ref
   const nativeDetectorRef = useRef<any>(null);
@@ -132,10 +136,10 @@ export const ScanView: React.FC = () => {
     setNameError(null);
     setPriceError(null);
     isProcessingRef.current = false;
-    ignoreUntilRef.current = Date.now() + 1500;
+    ignoreUntilRef.current = Date.now() + 1200;
   }, []);
 
-  // Process a recognized barcode string -> triggers the appropriate pop-up modal
+  // Process a recognized barcode string -> triggers the appropriate pop-up modal without any brand predictor
   const processBarcode = useCallback(
     async (rawCode: string) => {
       const cleanDigits = cleanBarcodeDigits(rawCode);
@@ -152,26 +156,17 @@ export const ScanView: React.FC = () => {
         setQuantityToAdd(1);
         setModalType('existing_item');
       } else {
-        // Pop-up 2: "Add to inventory"
+        // Pop-up 2: "Add to inventory" (clean fields, no automatic brand predictor)
         setMatchedItem(null);
+        setNewProductName('');
+        setNewProductPrice('');
+        setNewProductBrand('');
+        setNewProductSize(100);
+        setNewProductType('Eau de Parfum');
+        setNewProductGender('Unisex');
+        setNewProductLocation('Shelf A - Row 1');
+        setNewProductInitialStock(5);
         setModalType('new_item_confirm');
-
-        setIsLookingUp(true);
-        lookupProductDetails(cleanDigits)
-          .then((res) => {
-            setIsLookingUp(false);
-            if (res?.fields) {
-              if (res.fields.name) setNewProductName(res.fields.name);
-              if (res.fields.brand) setNewProductBrand(res.fields.brand);
-              if (res.fields.size) setNewProductSize(res.fields.size);
-              if (res.fields.type) setNewProductType(res.fields.type);
-              if (res.fields.gender) setNewProductGender(res.fields.gender);
-              if (res.fields.price) setNewProductPrice(Number(res.fields.price).toFixed(2));
-            }
-          })
-          .catch(() => {
-            setIsLookingUp(false);
-          });
       }
     },
     [items]
@@ -180,11 +175,12 @@ export const ScanView: React.FC = () => {
   // Decode a canvas with ZXing using GlobalHistogram and Hybrid binarizers
   const decodeCanvasWithZXing = useCallback(
     (canvas: HTMLCanvasElement): { isQr: boolean; text?: string } | null => {
+      if (!canvas.width || !canvas.height) return null;
       const reader = getZxingReader();
       try {
         const luminanceSource = new HTMLCanvasElementLuminanceSource(canvas);
 
-        // Attempt 1: GlobalHistogramBinarizer (proven superior for camera-captured 1D retail barcodes)
+        // Attempt 1: GlobalHistogramBinarizer (best for 1D retail barcodes)
         try {
           const bitmap = new BinaryBitmap(new GlobalHistogramBinarizer(luminanceSource));
           const result = reader.decode(bitmap);
@@ -207,6 +203,21 @@ export const ScanView: React.FC = () => {
             return { isQr, text: result.getText() };
           }
         } catch {
+          //Fall through to attempt 3 (inverted luminance for dark/metallic packaging)
+        } finally {
+          reader.reset();
+        }
+
+        // Attempt 3: Inverted Luminance (handles light bars on dark/gold perfume boxes)
+        try {
+          const invertedSource = luminanceSource.invert();
+          const bitmap = new BinaryBitmap(new HybridBinarizer(invertedSource));
+          const result = reader.decode(bitmap);
+          if (result) {
+            const isQr = result.getBarcodeFormat() === BarcodeFormat.QR_CODE;
+            return { isQr, text: result.getText() };
+          }
+        } catch {
           // Miss
         } finally {
           reader.reset();
@@ -219,7 +230,7 @@ export const ScanView: React.FC = () => {
     [getZxingReader]
   );
 
-  // Process a live video frame
+  // Process a live video frame with high-accuracy multi-pass pipeline
   const decodeVideoFrame = useCallback(async (): Promise<{ isQr: boolean; text?: string } | null> => {
     const video = videoRef.current;
     if (!video || video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
@@ -229,7 +240,7 @@ export const ScanView: React.FC = () => {
     const vw = video.videoWidth;
     const vh = video.videoHeight;
 
-    // STEP A: Try Native BarcodeDetector (hardware accelerated in Chrome/Edge/Android)
+    // PASS 1: Native BarcodeDetector on full video element (hardware accelerated)
     if (nativeDetectorRef.current) {
       try {
         const detected = await nativeDetectorRef.current.detect(video);
@@ -239,36 +250,84 @@ export const ScanView: React.FC = () => {
           return { isQr, text: first.rawValue };
         }
       } catch {
-        // Fallback to ZXing if native detector throws on this frame
+        // Continue to canvas passes
       }
     }
 
-    // STEP B: ZXing with offscreen canvas
-    // Create canvas scaled to standard scanning resolution (max 800px wide for high speed & sharp bars)
-    const targetW = Math.min(vw, 800);
-    const targetH = Math.floor((vh * targetW) / vw);
+    // PASS 2: Center Viewfinder Band Crop (eliminates background clutter around the 1D barcode)
+    if (!cropCanvasRef.current) cropCanvasRef.current = document.createElement('canvas');
+    const cropCanvas = cropCanvasRef.current;
+    const sx = Math.floor(vw * 0.08);
+    const sy = Math.floor(vh * 0.22);
+    const sw = Math.floor(vw * 0.84);
+    const sh = Math.floor(vh * 0.56);
+    const cropTargetW = Math.min(sw, 960);
+    const cropTargetH = Math.max(1, Math.floor((sh * cropTargetW) / sw));
+    if (cropCanvas.width !== cropTargetW) cropCanvas.width = cropTargetW;
+    if (cropCanvas.height !== cropTargetH) cropCanvas.height = cropTargetH;
 
-    const offscreen = document.createElement('canvas');
-    offscreen.width = targetW;
-    offscreen.height = targetH;
-    const ctx = offscreen.getContext('2d', { willReadFrequently: true });
-    if (!ctx) return null;
+    const cropCtx = cropCanvas.getContext('2d', { willReadFrequently: true });
+    if (cropCtx) {
+      cropCtx.filter = 'none';
+      cropCtx.drawImage(video, sx, sy, sw, sh, 0, 0, cropTargetW, cropTargetH);
 
-    ctx.drawImage(video, 0, 0, targetW, targetH);
+      if (nativeDetectorRef.current) {
+        try {
+          const detectedCrop = await nativeDetectorRef.current.detect(cropCanvas);
+          if (detectedCrop && detectedCrop.length > 0) {
+            const first = detectedCrop[0];
+            const isQr = first.format === 'qr_code' || String(first.format).toLowerCase().includes('qr');
+            return { isQr, text: first.rawValue };
+          }
+        } catch {
+          // Continue
+        }
+      }
 
-    // Pass 1: Full frame decode
-    let hit = decodeCanvasWithZXing(offscreen);
+      const cropHit = decodeCanvasWithZXing(cropCanvas);
+      if (cropHit) return cropHit;
+    }
+
+    // PASS 3: High-Contrast Sharpened Center Band (reads low-light, glossy cellophane, or low-contrast webcams)
+    if (!contrastCanvasRef.current) contrastCanvasRef.current = document.createElement('canvas');
+    const contrastCanvas = contrastCanvasRef.current;
+    if (contrastCanvas.width !== cropTargetW) contrastCanvas.width = cropTargetW;
+    if (contrastCanvas.height !== cropTargetH) contrastCanvas.height = cropTargetH;
+    const contrastCtx = contrastCanvas.getContext('2d', { willReadFrequently: true });
+    if (contrastCtx) {
+      contrastCtx.filter = 'contrast(1.75) brightness(1.08) grayscale(1)';
+      contrastCtx.drawImage(video, sx, sy, sw, sh, 0, 0, cropTargetW, cropTargetH);
+      const contrastHit = decodeCanvasWithZXing(contrastCanvas);
+      if (contrastHit) return contrastHit;
+    }
+
+    // PASS 4: Full-frame ZXing decode
+    if (!fullCanvasRef.current) fullCanvasRef.current = document.createElement('canvas');
+    const fullCanvas = fullCanvasRef.current;
+    const targetW = Math.min(vw, 900);
+    const targetH = Math.max(1, Math.floor((vh * targetW) / vw));
+    if (fullCanvas.width !== targetW) fullCanvas.width = targetW;
+    if (fullCanvas.height !== targetH) fullCanvas.height = targetH;
+    const fullCtx = fullCanvas.getContext('2d', { willReadFrequently: true });
+    if (!fullCtx) return null;
+
+    fullCtx.filter = 'none';
+    fullCtx.drawImage(video, 0, 0, targetW, targetH);
+    let hit = decodeCanvasWithZXing(fullCanvas);
     if (hit) return hit;
 
-    // Pass 2: Rotated 90 degrees (in case user holds barcode vertically)
-    const rotated = document.createElement('canvas');
-    rotated.width = targetH;
-    rotated.height = targetW;
+    // PASS 5: Rotated 90 degrees (in case user holds perfume barcode vertically)
+    if (!rotCanvasRef.current) rotCanvasRef.current = document.createElement('canvas');
+    const rotated = rotCanvasRef.current;
+    if (rotated.width !== targetH) rotated.width = targetH;
+    if (rotated.height !== targetW) rotated.height = targetW;
     const rotCtx = rotated.getContext('2d', { willReadFrequently: true });
     if (rotCtx) {
+      rotCtx.save();
       rotCtx.translate(targetH / 2, targetW / 2);
       rotCtx.rotate(Math.PI / 2);
-      rotCtx.drawImage(offscreen, -targetW / 2, -targetH / 2);
+      rotCtx.drawImage(fullCanvas, -targetW / 2, -targetH / 2);
+      rotCtx.restore();
       hit = decodeCanvasWithZXing(rotated);
       if (hit) return hit;
     }
@@ -276,7 +335,7 @@ export const ScanView: React.FC = () => {
     return null;
   }, [decodeCanvasWithZXing]);
 
-  // Start Camera Stream with resilient fallback constraints
+  // Start Camera Stream with high-resolution & continuous autofocus constraints
   const startCamera = useCallback(async () => {
     setCameraError(null);
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -291,20 +350,32 @@ export const ScanView: React.FC = () => {
 
       let stream: MediaStream;
       try {
-        // Try optimal rear environment camera constraints for barcode scanning
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { ideal: 'environment' },
-            width: { ideal: 1280 },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
           },
           audio: false,
         });
       } catch {
-        // Fallback to basic video constraint if device rejects specific dimensions
         stream = await navigator.mediaDevices.getUserMedia({
           video: true,
           audio: false,
         });
+      }
+
+      // Enable continuous autofocus if the device camera supports it
+      const videoTrack = stream.getVideoTracks()[0];
+      if (videoTrack && typeof videoTrack.getCapabilities === 'function') {
+        try {
+          const caps: any = videoTrack.getCapabilities();
+          if (caps?.focusMode && Array.isArray(caps.focusMode) && caps.focusMode.includes('continuous')) {
+            await videoTrack.applyConstraints({ advanced: [{ focusMode: 'continuous' } as any] });
+          }
+        } catch {
+          // Ignore if advanced focus constraint is not supported
+        }
       }
 
       streamRef.current = stream;
@@ -321,7 +392,6 @@ export const ScanView: React.FC = () => {
           playPromise
             .then(() => setIsCameraActive(true))
             .catch(() => {
-              // Wait for user interaction or loadeddata
               vid.onloadeddata = () => {
                 vid.play().then(() => setIsCameraActive(true)).catch(() => {});
               };
@@ -334,7 +404,7 @@ export const ScanView: React.FC = () => {
     }
   }, []);
 
-  // Run camera lifecycle and scan loop
+  // Run camera lifecycle and fast scan loop
   useEffect(() => {
     if (initialBarcodeForScan) {
       processBarcode(initialBarcodeForScan);
@@ -349,10 +419,9 @@ export const ScanView: React.FC = () => {
     const scanLoop = async (time: number) => {
       if (!isMounted) return;
 
-      // Scan every ~180ms
-      if (time - lastTick > 180) {
+      // Scan every ~90ms (~11 FPS) for snappy barcode capture
+      if (time - lastTick > 90) {
         lastTick = time;
-        // Only run detection when no pop-up modal is open
         if (
           !isProcessingRef.current &&
           modalType === null &&
@@ -384,7 +453,7 @@ export const ScanView: React.FC = () => {
     };
   }, [startCamera, processBarcode, modalType, decodeVideoFrame, initialBarcodeForScan, setInitialBarcodeForScan]);
 
-  // Photo / Image File Upload Scanner
+  // Photo / Image File Upload Scanner with multi-pass enhancement
   const handlePhotoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -392,7 +461,7 @@ export const ScanView: React.FC = () => {
     try {
       const bmp = await createImageBitmap(file);
 
-      // Try native detector first on image bitmap
+      // 1. Try native detector first on image bitmap
       if (nativeDetectorRef.current) {
         try {
           const detected = await nativeDetectorRef.current.detect(bmp);
@@ -410,14 +479,40 @@ export const ScanView: React.FC = () => {
         }
       }
 
-      // Fallback: draw to canvas and decode with ZXing
+      // 2. Multi-pass ZXing on uploaded image (Normal, High-Contrast, Rotated)
       const canvas = document.createElement('canvas');
-      canvas.width = bmp.width;
-      canvas.height = bmp.height;
-      const ctx = canvas.getContext('2d');
+      const maxDim = 1200;
+      const scale = bmp.width > maxDim ? maxDim / bmp.width : 1;
+      canvas.width = Math.max(1, Math.floor(bmp.width * scale));
+      canvas.height = Math.max(1, Math.floor(bmp.height * scale));
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
       if (ctx) {
-        ctx.drawImage(bmp, 0, 0);
-        const hit = decodeCanvasWithZXing(canvas);
+        // Normal pass
+        ctx.filter = 'none';
+        ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+        let hit = decodeCanvasWithZXing(canvas);
+
+        // High-contrast pass
+        if (!hit) {
+          ctx.filter = 'contrast(1.8) brightness(1.08) grayscale(1)';
+          ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+          hit = decodeCanvasWithZXing(canvas);
+        }
+
+        // Rotated 90 deg pass
+        if (!hit) {
+          const rotCanvas = document.createElement('canvas');
+          rotCanvas.width = canvas.height;
+          rotCanvas.height = canvas.width;
+          const rCtx = rotCanvas.getContext('2d', { willReadFrequently: true });
+          if (rCtx) {
+            rCtx.translate(rotCanvas.width / 2, rotCanvas.height / 2);
+            rCtx.rotate(Math.PI / 2);
+            rCtx.drawImage(canvas, -canvas.width / 2, -canvas.height / 2);
+            hit = decodeCanvasWithZXing(rotCanvas);
+          }
+        }
+
         if (hit) {
           if (hit.isQr) {
             setQrDetected(true);
@@ -429,9 +524,9 @@ export const ScanView: React.FC = () => {
           }
         }
       }
-      alert('No barcode detected in uploaded photo. Please ensure barcode is clear or enter the 13 digits below.');
+      showToast('No barcode detected in uploaded photo. Please ensure barcode is clear or enter the digits below.');
     } catch {
-      alert('Failed to process image. Please try another photo or enter manually.');
+      showToast('Failed to process image. Please try another photo or enter manually.');
     } finally {
       event.target.value = '';
     }
@@ -606,9 +701,9 @@ export const ScanView: React.FC = () => {
                 }
                 processBarcode(manualCode.trim());
               }}
-              className="px-4 py-2 bg-[#9c8f6f] hover:bg-[#7c7156] text-white font-semibold text-xs rounded-xl inline-flex items-center gap-1.5 transition-colors shadow-xs"
+              className="px-4 py-2 bg-[#9c8f6f] hover:bg-[#7c7156] text-white font-bold text-xs rounded-xl inline-flex items-center gap-1.5 transition-colors shadow-xs"
             >
-              <Search className="w-3.5 h-3.5" /> Look Up
+              <Plus className="w-3.5 h-3.5" /> ADD
             </button>
           </div>
           {manualError && <p className="text-xs text-[#a05539] font-medium">{manualError}</p>}
@@ -788,23 +883,6 @@ export const ScanView: React.FC = () => {
                   This barcode is not currently in our store inventory. Click "Yes, Add" to enter product details.
                 </p>
               </div>
-
-              {isLookingUp ? (
-                <div className="text-xs text-[#7c7156] flex items-center justify-center gap-1.5 py-1">
-                  <Sparkles className="w-3.5 h-3.5 animate-spin" />
-                  <span>Looking up product details...</span>
-                </div>
-              ) : newProductName ? (
-                <div className="p-3 bg-[#faf8f4] border border-[#e7e2d4] rounded-xl text-left space-y-1 animate-fadeIn">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#7c7156]">
-                    Suggested Details
-                  </div>
-                  <div className="font-serif font-bold text-sm text-[#1b1915]">{newProductName}</div>
-                  <div className="text-xs text-[#56534a]">
-                    {newProductBrand} · {newProductSize} mL · {newProductType}
-                  </div>
-                </div>
-              ) : null}
 
               <div className="flex gap-3 pt-2">
                 <button
