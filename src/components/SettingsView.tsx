@@ -62,12 +62,12 @@ export const SettingsView: React.FC = () => {
         </h1>
       </div>
 
-      {/* Currency Standard: Philippines Boutique Standard (Only Peso) */}
+      {/* Currency Standard: Philippines Standard (Only Peso) */}
       <div className="p-5 bg-white border border-[#e7e2d4] rounded-2xl shadow-xs space-y-3.5">
         <div className="flex items-center justify-between">
           <h3 className="font-serif text-base font-bold text-[#1b1915] flex items-center gap-2">
             <Coins className="w-4 h-4 text-[#7c7156]" />
-            Boutique Currency Standard
+            Store Currency Standard
           </h3>
           <span className="text-[11px] font-bold uppercase tracking-wider text-[#57795c] bg-[#eef2ec] border border-[#d2dfcf] px-2.5 py-1 rounded-full flex items-center gap-1">
             <Check className="w-3.5 h-3.5" /> Philippines (₱ Only)
@@ -96,7 +96,7 @@ export const SettingsView: React.FC = () => {
           <div>
             <h3 className="font-serif text-base font-bold text-[#1b1915] flex items-center gap-2">
               <Lock className="w-4 h-4 text-[#7c7156]" />
-              Director Security PIN
+              Admin Security PIN
             </h3>
             <p className="text-xs text-[#8c8878] mt-0.5">
               Required for deleting catalog items and restricted administrator changes.
@@ -188,7 +188,7 @@ export const SettingsView: React.FC = () => {
         <div className="pt-2 border-t border-[#f0ece0]">
           <button
             onClick={() => {
-              if (window.confirm('Reset all inventory and sales to the baseline 8 boutique fragrances?')) {
+              if (window.confirm('Reset all inventory and sales to the baseline 8 fragrances?')) {
                 resetDemoData();
               }
             }}

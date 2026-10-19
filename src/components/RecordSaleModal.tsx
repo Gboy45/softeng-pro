@@ -131,7 +131,7 @@ export const RecordSaleModal: React.FC = () => {
       name: clientName.trim() || 'Walk-in Customer',
       date: saleDate,
       amount,
-      note: note.trim() || autoNote || 'Boutique Sale',
+      note: note.trim() || autoNote || 'Store Sale',
     });
 
     showToast(`Recorded sale of ${totalItemCount} fragrance bottles (₱${amount.toFixed(2)})`);

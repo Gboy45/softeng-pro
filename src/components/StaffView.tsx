@@ -35,11 +35,11 @@ export const StaffView: React.FC = () => {
           <div className="flex items-center gap-2.5">
             <Users className="w-4 h-4 text-[#8c826e]" />
             <h3 className="font-serif text-base font-bold text-[#1b1915]">
-              Active Boutique Team ({personnel.length})
+              Active Team ({personnel.length})
             </h3>
           </div>
           <span className="text-xs text-[#8c8878]">
-            Logged in as: <strong className="text-[#1b1915]">{currentUser?.name}</strong>
+            Logged in as: <strong className="text-[#1b1915]">{currentUser?.role === 'admin' ? 'Admin' : 'Associate'}</strong>
           </span>
         </div>
 
@@ -68,7 +68,7 @@ export const StaffView: React.FC = () => {
                     <p className="text-xs text-[#56534a]">
                       @{p.username} · Role:{' '}
                       <strong className="text-[#1b1915]">
-                        {isAdmin ? 'Boutique Director (Admin)' : 'Boutique Associate (Personnel)'}
+                        {isAdmin ? 'Admin' : 'Associate'}
                       </strong>
                     </p>
                   </div>
@@ -91,13 +91,13 @@ export const StaffView: React.FC = () => {
       {/* Role Privileges Overview Card */}
       <div className="bg-white border border-[#e7e2d4] rounded-2xl p-5 shadow-xs space-y-4">
         <h3 className="font-serif text-base font-bold text-[#1b1915]">
-          Boutique Role Privileges
+          Role Privileges
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
           <div className="p-4 bg-[#faf8f4] border border-[#e7e2d4] rounded-xl space-y-2">
             <div className="font-bold text-sm text-[#1b1915] flex items-center gap-2">
               <Shield className="w-4 h-4 text-[#7c7156]" />
-              <span>Director (Admin)</span>
+              <span>Admin</span>
             </div>
             <ul className="space-y-1.5 text-[#56534a] pt-1">
               <li className="flex items-center gap-2">
@@ -118,7 +118,7 @@ export const StaffView: React.FC = () => {
           <div className="p-4 bg-[#faf8f4] border border-[#e7e2d4] rounded-xl space-y-2">
             <div className="font-bold text-sm text-[#1b1915] flex items-center gap-2">
               <User className="w-4 h-4 text-[#7c7156]" />
-              <span>Associate (Personnel)</span>
+              <span>Associate</span>
             </div>
             <ul className="space-y-1.5 text-[#56534a] pt-1">
               <li className="flex items-center gap-2">
@@ -148,7 +148,7 @@ export const StaffView: React.FC = () => {
           <div className="w-full max-w-md bg-white rounded-2xl border border-[#e7e2d4] shadow-2xl overflow-hidden animate-scaleUp">
             <div className="flex items-center justify-between px-6 py-4 border-b border-[#e7e2d4] bg-[#faf8f4]">
               <h3 className="font-serif text-base font-bold text-[#1b1915]">
-                Add Boutique Staff
+                Add Staff
               </h3>
               <button
                 type="button"

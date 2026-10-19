@@ -251,7 +251,7 @@ export const ReportsView: React.FC = () => {
         doc.setTextColor(255, 255, 255);
         const reportTitle =
           includeStocks && includePurchaseHistory
-            ? 'BOUTIQUE STOCKS & PURCHASE HISTORY REPORT'
+            ? 'STOCKS & PURCHASE HISTORY REPORT'
             : includeStocks
             ? 'AVAILABLE & TOTAL STOCKS REPORT'
             : 'PURCHASE HISTORY & TOTAL SALES REPORT';
@@ -466,13 +466,13 @@ export const ReportsView: React.FC = () => {
           doc.setFontSize(7.5);
           doc.setTextColor(140, 136, 120);
           doc.text(
-            `Philippine Boutique Retail Report · Page ${p} of ${pageCount}`,
+            `Inventory & Sales Report · Page ${p} of ${pageCount}`,
             14,
             doc.internal.pageSize.height - 8
           );
         }
 
-        doc.save(`boutique-report-${dateStr}.pdf`);
+        doc.save(`inventory-report-${dateStr}.pdf`);
         showToast('Successfully downloaded PDF report');
       } catch (err) {
         console.error('Failed to generate PDF:', err);
@@ -486,7 +486,7 @@ export const ReportsView: React.FC = () => {
 
         combinedAoA.push([
           includeStocks && includePurchaseHistory
-            ? 'BOUTIQUE AVAILABLE STOCKS & PURCHASE HISTORY REPORT'
+            ? 'AVAILABLE STOCKS & PURCHASE HISTORY REPORT'
             : includeStocks
             ? 'AVAILABLE & TOTAL STOCKS REPORT'
             : 'PURCHASE HISTORY & TOTAL SALES REPORT',
@@ -611,7 +611,7 @@ export const ReportsView: React.FC = () => {
           XLSX.utils.book_append_sheet(workbook, salesWorksheet, 'Purchase History');
         }
 
-        XLSX.writeFile(workbook, `boutique-report-${dateStr}.xlsx`);
+        XLSX.writeFile(workbook, `inventory-report-${dateStr}.xlsx`);
         showToast('Successfully downloaded Spreadsheet (.xlsx)');
       } catch (err) {
         console.error('Failed to generate XLSX:', err);
@@ -826,7 +826,7 @@ export const ReportsView: React.FC = () => {
                       <div className="flex items-center justify-between gap-2">
                         <div className="text-[11px] sm:text-xs font-bold tracking-wide uppercase truncate">
                           {includeStocks && includePurchaseHistory
-                            ? 'BOUTIQUE STOCKS & PURCHASE HISTORY REPORT'
+                            ? 'STOCKS & PURCHASE HISTORY REPORT'
                             : includeStocks
                             ? 'AVAILABLE & TOTAL STOCKS REPORT'
                             : 'PURCHASE HISTORY & TOTAL SALES REPORT'}
@@ -981,7 +981,7 @@ export const ReportsView: React.FC = () => {
                     <div className="bg-[#217346] text-white px-3 py-2 flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2 truncate">
                         <FileSpreadsheet className="w-4 h-4 shrink-0" />
-                        <span className="truncate">boutique-report-{dateStr}.xlsx</span>
+                        <span className="truncate">inventory-report-{dateStr}.xlsx</span>
                       </div>
                       <span className="text-[10px] bg-white/15 px-2 py-0.5 rounded shrink-0">
                         {slides.length > 1

@@ -175,14 +175,22 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
     try {
       const stored = localStorage.getItem(STORAGE_AUTH_KEY);
-      if (stored) return JSON.parse(stored);
+      if (stored) {
+        const parsed = JSON.parse(stored) as UserAccount;
+        if (parsed.username === 'ferdie' || parsed.name === 'Boutique Director') {
+          parsed.name = 'Admin';
+        } else if (parsed.username === 'charlene' || parsed.name === 'Boutique Associate') {
+          parsed.name = 'Associate';
+        }
+        return parsed;
+      }
     } catch {
       // not logged in
     }
-    // Default to Boutique Director (Admin) matching screenshots
+    // Default to Admin
     return {
       id: 'user-ferdie',
-      name: 'Boutique Director',
+      name: 'Admin',
       username: 'ferdie',
       role: 'admin',
     };
@@ -209,8 +217,8 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
   });
 
   const [personnel, setPersonnel] = useState<Personnel[]>([
-    { id: 'p-admin', name: 'Boutique Director (Ferdie)', username: 'ferdie', status: 'active', createdAt: '2026-09-01' },
-    { id: 'p-staff', name: 'Charlene', username: 'charlene', status: 'active', createdAt: '2026-10-01' },
+    { id: 'p-admin', name: 'Admin (Ferdie)', username: 'ferdie', status: 'active', createdAt: '2026-09-01' },
+    { id: 'p-staff', name: 'Associate (Charlene)', username: 'charlene', status: 'active', createdAt: '2026-10-01' },
   ]);
 
   const [currency, setCurrencyState] = useState<string>('₱');
@@ -259,26 +267,26 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
     if (u === 'ferdie' && p === '123') {
       const account: UserAccount = {
         id: 'user-ferdie',
-        name: 'Boutique Director',
+        name: 'Admin',
         username: 'ferdie',
         role: 'admin',
       };
       setCurrentUser(account);
       localStorage.setItem(STORAGE_AUTH_KEY, JSON.stringify(account));
-      showToast('Logged in as Boutique Director');
+      showToast('Logged in as Admin');
       return { success: true };
     }
 
     if (u === 'charlene' && p === '123') {
       const account: UserAccount = {
         id: 'user-charlene',
-        name: 'Charlene',
+        name: 'Associate',
         username: 'charlene',
         role: 'personnel',
       };
       setCurrentUser(account);
       localStorage.setItem(STORAGE_AUTH_KEY, JSON.stringify(account));
-      showToast('Logged in as Personnel (Charlene)');
+      showToast('Logged in as Associate');
       return { success: true };
     }
 
@@ -463,7 +471,7 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
     localStorage.removeItem(STORAGE_PIN_KEY);
     setItems(SEED_ITEMS);
     setSales(SEED_SALES);
-    showToast('Reset to boutique inventory baseline');
+    showToast('Reset to baseline inventory');
   }, [showToast]);
 
   return (

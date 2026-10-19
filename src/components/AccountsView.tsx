@@ -38,7 +38,7 @@ export const AccountsView: React.FC = () => {
   const handleUpdatePin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isAdminAccount) {
-      showToast('Only the Boutique Director can change the security PIN');
+      showToast('Only the Admin can change the security PIN');
       return;
     }
     const verified = await verifyPin(currentPin);
@@ -52,7 +52,7 @@ export const AccountsView: React.FC = () => {
     }
     const success = await updatePin(newPin);
     if (success) {
-      showToast('Director protection PIN updated');
+      showToast('Admin security PIN updated');
       setPinChangeOpen(false);
       setCurrentPin('');
       setNewPin('');
@@ -77,10 +77,10 @@ export const AccountsView: React.FC = () => {
             ACTIVE SESSION
           </span>
           <div className="text-base sm:text-lg font-bold text-[#1b1915] mt-0.5 truncate">
-            {currentUser?.name || 'Boutique Director'}
+            {isAdminAccount ? 'Admin' : 'Associate'}
           </div>
           <div className="text-[11px] font-semibold uppercase text-[#8c826e] tracking-tight mt-0.5">
-            {isAdminAccount ? 'DIRECTOR (ADMIN)' : 'BOUTIQUE PERSONNEL'}
+            {isAdminAccount ? 'ADMIN' : 'ASSOCIATE'}
           </div>
         </div>
 
@@ -110,7 +110,7 @@ export const AccountsView: React.FC = () => {
             </h3>
           </div>
           <span className="text-xs text-[#8c8878]">
-            Logged in as: <strong className="text-[#1b1915]">{currentUser?.name}</strong>
+            Logged in as: <strong className="text-[#1b1915]">{isAdminAccount ? 'Admin' : 'Associate'}</strong>
           </span>
         </div>
 
@@ -139,7 +139,7 @@ export const AccountsView: React.FC = () => {
                     <p className="text-xs text-[#56534a]">
                       @{p.username} · Role:{' '}
                       <strong className="text-[#1b1915]">
-                        {isAdmin ? 'Boutique Director (Admin)' : 'Boutique Associate (Personnel)'}
+                        {isAdmin ? 'Admin' : 'Associate'}
                       </strong>
                     </p>
                   </div>
@@ -159,12 +159,12 @@ export const AccountsView: React.FC = () => {
         </div>
       </div>
 
-      {/* Director Security PIN Protection — Personnel accounts CANNOT change the PIN */}
+      {/* Admin Security PIN Protection — Associate accounts CANNOT change the PIN */}
       <div className="p-4 sm:p-5 bg-white border border-[#e7e2d4] rounded-2xl shadow-xs space-y-3.5">
         <div className="flex items-center justify-between gap-2">
           <h3 className="font-serif text-base font-bold text-[#1b1915] flex items-center gap-2">
             <Lock className="w-4 h-4 text-[#7c7156]" />
-            Director Security PIN
+            Admin Security PIN
           </h3>
           {isAdminAccount ? (
             <button
@@ -176,12 +176,12 @@ export const AccountsView: React.FC = () => {
             </button>
           ) : (
             <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-[#f6f0e1] text-[#9c793c] border border-[#ecdccf] flex items-center gap-1">
-              <Lock className="w-3 h-3" /> Director Only
+              <Lock className="w-3 h-3" /> Admin Only
             </span>
           )}
         </div>
         <p className="text-xs text-[#8c8878]">
-          Restricts item deletion and administrative privileges to authorized directors.
+          Restricts item deletion and administrative privileges to authorized administrators.
         </p>
 
         {isAdminAccount && pinChangeOpen && (
