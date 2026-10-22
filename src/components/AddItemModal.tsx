@@ -1,12 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { X, Sparkles, Package, Barcode, Check } from 'lucide-react';
 import { useInventory } from '../context/InventoryContext.js';
 import { validateProductName, validatePrice } from '../utils/inventoryLogic.js';
-import { lookupProductDetails } from '../utils/lookup.js';
 import { CurrencySign } from './PriceDisplay.js';
 
 export const AddItemModal: React.FC = () => {
-  const { isAddItemOpen, setIsAddItemOpen, addItem, items, currency } = useInventory();
+  const { isAddItemOpen, setIsAddItemOpen, addItem, currency } = useInventory();
 
   const [barcode, setBarcode] = useState('');
   const [name, setName] = useState('');
@@ -17,6 +16,8 @@ export const AddItemModal: React.FC = () => {
   const [stock, setStock] = useState<number>(10);
   const [price, setPrice] = useState('75.00');
   const [location, setLocation] = useState('Shelf A - Row 1');
+  const [batchCode, setBatchCode] = useState('');
+  const [hasTester, setHasTester] = useState(false);
 
   const [nameError, setNameError] = useState<string | null>(null);
   const [priceError, setPriceError] = useState<string | null>(null);
@@ -52,6 +53,8 @@ export const AddItemModal: React.FC = () => {
       price: priceCheck.parsedPrice,
       location: location.trim() || 'Shelf A - Row 1',
       barcode: finalBarcode,
+      hasTester,
+      batchCode: batchCode.trim().toUpperCase(),
     });
 
     setIsAddItemOpen(false);
@@ -61,6 +64,8 @@ export const AddItemModal: React.FC = () => {
     setBrand('');
     setPrice('75.00');
     setStock(10);
+    setBatchCode('');
+    setHasTester(false);
     setNameError(null);
     setPriceError(null);
   };
@@ -240,6 +245,42 @@ export const AddItemModal: React.FC = () => {
                 onChange={(e) => setStock(Math.max(0, parseInt(e.target.value, 10) || 0))}
                 className="w-full px-3.5 py-2.5 bg-white border border-[#e7e2d4] rounded-xl text-sm font-mono text-[#1b1915]"
               />
+            </div>
+
+            {/* Batch Code */}
+            <div className="space-y-1">
+              <label className="block text-xs font-bold uppercase tracking-wider text-[#56534a]">
+                Batch Code
+              </label>
+              <input
+                type="text"
+                value={batchCode}
+                onChange={(e) => setBatchCode(e.target.value)}
+                placeholder="e.g. CH-8804"
+                className="w-full px-3.5 py-2.5 bg-white border border-[#e7e2d4] rounded-xl text-sm font-mono uppercase text-[#1b1915]"
+              />
+            </div>
+
+            {/* Counter Tester */}
+            <div className="space-y-1">
+              <label className="block text-xs font-bold uppercase tracking-wider text-[#56534a]">
+                Counter Tester
+              </label>
+              <button
+                type="button"
+                onClick={() => setHasTester(!hasTester)}
+                className={`w-full px-3.5 py-2.5 rounded-xl border text-xs font-semibold flex items-center justify-between transition-colors ${
+                  hasTester
+                    ? 'bg-[#eef2ec] border-[#c9d8c5] text-[#57795c]'
+                    : 'bg-[#faf8f4] border-[#e7e2d4] text-[#56534a]'
+                }`}
+              >
+                <span className="flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>{hasTester ? 'Tester Available' : 'No Tester'}</span>
+                </span>
+                {hasTester && <Check className="w-3.5 h-3.5" />}
+              </button>
             </div>
           </div>
 

@@ -94,14 +94,17 @@ export const Navigation: React.FC = () => {
         </div>
       </aside>
 
-      {/* Mobile Topbar - Thinner, sleek header */}
-      <header className="md:hidden sticky top-0 z-30 flex items-center justify-center px-4 py-2 bg-[#faf8f4] border-b border-[#e7e2d4]">
-        <BottleLogo size={24} showSubtitle={false} layout="horizontal" />
+      {/* Mobile Topbar - Sleek sticky header */}
+      <header className="md:hidden sticky top-0 z-30 py-2 px-3.5 flex items-center justify-between bg-[#faf8f4]/95 backdrop-blur-md border-b border-[#e7e2d4]">
+        <BottleLogo size={22} showSubtitle={false} layout="horizontal" />
+        <span className="text-[10px] font-bold uppercase tracking-wider text-[#7c7156] bg-[#efeadc] px-2 py-0.5 rounded-md border border-[#e7e2d4]">
+          {currentUser?.role === 'admin' ? 'Admin' : 'Associate'}
+        </span>
       </header>
 
-      {/* Mobile Bottom Navigation Bar - Thinner, sleek non-bulky layout with dividing lines */}
+      {/* Mobile Bottom Navigation Bar - Ergonomic thumb-zone tab bar */}
       <nav
-        className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-[#e7e2d4] pb-safe flex items-stretch shadow-md"
+        className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-[#e7e2d4] pb-safe grid grid-cols-6 items-stretch shadow-md"
         aria-label="Mobile Navigation"
       >
         {navItems.map((item) => {
@@ -110,40 +113,28 @@ export const Navigation: React.FC = () => {
             activeTab === item.key ||
             (item.key === 'accounts' && (activeTab === 'staff' || activeTab === 'settings'));
 
-          const displayLabel =
-            item.key === 'inventory'
-              ? 'Inventory'
-              : item.key === 'scan'
-              ? 'Scan'
-              : item.key === 'sales'
-              ? 'Sales'
-              : item.key === 'reports'
-              ? 'Reports'
-              : item.key === 'accounts'
-              ? 'Settings'
-              : item.label;
-
           return (
             <button
               key={item.key}
+              type="button"
               onClick={() => setActiveTab(item.key)}
-              className={`flex-1 flex flex-col items-center justify-center py-1.5 px-0.5 min-h-[50px] transition-colors border-r border-[#e7e2d4] last:border-r-0 ${
-                isActive ? 'bg-[#faf8f4] text-[#1b1915]' : 'bg-white text-[#7c7156] hover:bg-[#faf8f4]'
+              className={`flex flex-col items-center justify-center py-1.5 px-0.5 min-h-[52px] transition-all touch-manipulation active:scale-95 border-r border-[#f0ece0] last:border-r-0 ${
+                isActive ? 'bg-[#faf8f4] text-[#1b1915]' : 'bg-transparent text-[#7c7156] hover:bg-[#faf8f4]'
               }`}
             >
               <div
-                className={`p-1 rounded-md transition-transform ${
+                className={`p-1 rounded-lg transition-colors ${
                   isActive ? 'bg-[#efeadc] text-[#1b1915]' : ''
                 }`}
               >
                 <Icon className="w-4 h-4 shrink-0" />
               </div>
               <span
-                className={`text-[9.5px] mt-0.5 truncate text-center leading-tight tracking-tight ${
+                className={`text-[10px] mt-0.5 truncate max-w-full px-0.5 text-center leading-tight tracking-tight ${
                   isActive ? 'font-bold text-[#1b1915]' : 'font-medium text-[#7c7156]'
                 }`}
               >
-                {displayLabel}
+                {item.label}
               </span>
             </button>
           );

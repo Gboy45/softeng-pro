@@ -18,7 +18,44 @@ export interface InventoryItem {
   price: number;
   location: string;
   barcode: string; // Exactly 13 digits
+  hasTester?: boolean;
+  batchCode?: string;
   updatedAt?: string;
+}
+
+export type StockAdjustmentReason =
+  | 'New Delivery / Restock'
+  | 'Customer Return'
+  | 'Inventory Audit Correction'
+  | 'Opened as Store Tester'
+  | 'Damaged / Broken Bottle'
+  | 'Pull-out / Display';
+
+export interface StockLogEntry {
+  id: string;
+  itemId: string;
+  itemName: string;
+  brand: string;
+  size: number;
+  mode: 'add' | 'subtract';
+  quantity: number;
+  previousStock: number;
+  newStock: number;
+  reason: string;
+  performedBy: string;
+  timestamp: string;
+}
+
+export type PaymentMethod = 'Cash' | 'GCash' | 'Maya' | 'Card' | 'Bank Transfer';
+
+export interface SalePurchasedItem {
+  itemId: string;
+  name: string;
+  brand: string;
+  size: number;
+  quantity: number;
+  unitPrice: number;
+  subtotal: number;
 }
 
 export interface Sale {
@@ -27,6 +64,11 @@ export interface Sale {
   date: string;
   amount: number;
   note?: string;
+  items?: SalePurchasedItem[];
+  paymentMethod?: PaymentMethod;
+  amountTendered?: number;
+  changeDue?: number;
+  cashier?: string;
 }
 
 export interface Personnel {

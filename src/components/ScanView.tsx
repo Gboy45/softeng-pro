@@ -1,7 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  Camera,
-  Search,
   Plus,
   Minus,
   CheckCircle2,
@@ -9,45 +7,59 @@ import {
   Package,
   Upload,
   RefreshCw,
-  Sparkles,
   X,
   Layers,
+  Focus,
+  Zap,
+  ShieldCheck,
 } from 'lucide-react';
 import {
   MultiFormatReader,
   BarcodeFormat,
   DecodeHintType,
   HTMLCanvasElementLuminanceSource,
+  RGBLuminanceSource,
   BinaryBitmap,
   HybridBinarizer,
   GlobalHistogramBinarizer,
 } from '@zxing/library';
 import { useInventory } from '../context/InventoryContext.js';
-import type { InventoryItem } from '../types/inventory.js';
+import type { InventoryItem, StockAdjustmentReason } from '../types/inventory.js';
 import {
   findItemByBarcode,
   cleanBarcodeDigits,
   validateProductName,
   validatePrice,
   BARCODE_EXACT_LENGTH,
+  evaluateBarcodeConsensus,
+  enhanceBarcodeLuminance,
+  type BarcodeFrameSample,
+  type BarcodeConsensusResult,
 } from '../utils/inventoryLogic.js';
 import { PriceDisplay, PesoSign } from './PriceDisplay.js';
 
 type ScanModalType = null | 'existing_item' | 'new_item_confirm' | 'new_item_form';
 
+const SCAN_ADD_REASONS: StockAdjustmentReason[] = [
+  'New Delivery / Restock',
+  'Customer Return',
+  'Inventory Audit Correction',
+];
+
 export const ScanView: React.FC = () => {
   const { items, addStock, addItem, initialBarcodeForScan, setInitialBarcodeForScan, showToast } = useInventory();
 
-  // Pop-up modal state: ONLY 'existing_item' (Add to existing inventory) or 'new_item_confirm'/'new_item_form' (Add to inventory)
+  // Pop-up modal state
   const [modalType, setModalType] = useState<ScanModalType>(null);
   const [scannedCode, setScannedCode] = useState<string>('');
   const [matchedItem, setMatchedItem] = useState<InventoryItem | null>(null);
 
-  // QR code warning state: "when a qr is spotted show a warning message that qr is not allowed"
+  // QR code warning state
   const [qrDetected, setQrDetected] = useState<boolean>(false);
 
-  // Flow 1: Existing item quantity to add
+  // Flow 1: Existing item quantity & reason to add
   const [quantityToAdd, setQuantityToAdd] = useState<number>(1);
+  const [stockReason, setStockReason] = useState<StockAdjustmentReason>('New Delivery / Restock');
 
   // Flow 2: Add new product name and price details
   const [newProductName, setNewProductName] = useState('');
@@ -64,38 +76,46 @@ export const ScanView: React.FC = () => {
   const [manualCode, setManualCode] = useState('');
   const [manualError, setManualError] = useState<string | null>(null);
 
-  // Camera stream state
+  // Camera stream & hardware controls state
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isCameraActive, setIsCameraActive] = useState<boolean>(false);
+  const [cameraResolution, setCameraResolution] = useState<string>('');
+  const [supportsTorch, setSupportsTorch] = useState<boolean>(false);
+  const [torchOn, setTorchOn] = useState<boolean>(false);
+  const [isRefocusing, setIsRefocusing] = useState<boolean>(false);
 
+  // Multi-frame consensus & processing state
   const scanLoopRef = useRef<number | null>(null);
+  const processTimerRef = useRef<number | null>(null);
   const isProcessingRef = useRef<boolean>(false);
   const ignoreUntilRef = useRef<number>(0);
+  const frameSamplesRef = useRef<BarcodeFrameSample[]>([]);
+  const [consensusState, setConsensusState] = useState<BarcodeConsensusResult | null>(null);
+  const [isProcessingScan, setIsProcessingScan] = useState<boolean>(false);
+  const [processingBarcodeText, setProcessingBarcodeText] = useState<string>('');
 
-  // Persistent reusable canvases for high-speed multi-pass barcode scanning
+  // Persistent reusable canvases for 6-stage high-precision barcode pipeline
+  const laserStripCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const upscaleCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const cropCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const contrastCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const fullCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const rotCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Native BarcodeDetector instance ref
   const nativeDetectorRef = useRef<any>(null);
 
-  // ZXing reader instance ref
+  // ZXing reader instance ref (restricted to genuine retail barcode formats to eliminate ITF/UPC-E partial noise)
   const zxingReaderRef = useRef<MultiFormatReader | null>(null);
   const getZxingReader = useCallback(() => {
     if (!zxingReaderRef.current) {
       const hints = new Map<DecodeHintType, any>();
       hints.set(DecodeHintType.POSSIBLE_FORMATS, [
         BarcodeFormat.EAN_13,
-        BarcodeFormat.EAN_8,
         BarcodeFormat.UPC_A,
-        BarcodeFormat.UPC_E,
         BarcodeFormat.CODE_128,
-        BarcodeFormat.CODE_39,
-        BarcodeFormat.ITF,
+        BarcodeFormat.EAN_8,
         BarcodeFormat.QR_CODE,
       ]);
       hints.set(DecodeHintType.TRY_HARDER, true);
@@ -111,7 +131,7 @@ export const ScanView: React.FC = () => {
     if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
       try {
         nativeDetectorRef.current = new (window as any).BarcodeDetector({
-          formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf', 'qr_code'],
+          formats: ['ean_13', 'upc_a', 'code_128', 'ean_8', 'qr_code'],
         });
       } catch {
         nativeDetectorRef.current = null;
@@ -119,12 +139,21 @@ export const ScanView: React.FC = () => {
     }
   }, []);
 
-  // Close the popup modal and resume scanning with a cooldown
+  // Close the popup modal and resume scanning with a clean consensus buffer
   const closeModal = useCallback(() => {
+    if (processTimerRef.current) {
+      window.clearTimeout(processTimerRef.current);
+      processTimerRef.current = null;
+    }
+    frameSamplesRef.current = [];
+    setConsensusState(null);
+    setIsProcessingScan(false);
+    setProcessingBarcodeText('');
     setModalType(null);
     setScannedCode('');
     setMatchedItem(null);
     setQuantityToAdd(1);
+    setStockReason('New Delivery / Restock');
     setNewProductName('');
     setNewProductPrice('');
     setNewProductBrand('');
@@ -136,60 +165,119 @@ export const ScanView: React.FC = () => {
     setNameError(null);
     setPriceError(null);
     isProcessingRef.current = false;
-    ignoreUntilRef.current = Date.now() + 1200;
+    ignoreUntilRef.current = Date.now() + 1600;
   }, []);
 
-  // Process a recognized barcode string -> triggers the appropriate pop-up modal without any brand predictor
+  // Process a verified barcode string -> triggers the appropriate pop-up modal
   const processBarcode = useCallback(
-    async (rawCode: string) => {
+    async (rawCode: string, immediate: boolean = false) => {
       const cleanDigits = cleanBarcodeDigits(rawCode);
       if (!cleanDigits || isProcessingRef.current || Date.now() < ignoreUntilRef.current) return;
       isProcessingRef.current = true;
+      frameSamplesRef.current = [];
+      setConsensusState(null);
       setQrDetected(false);
+      setIsProcessingScan(true);
+      setProcessingBarcodeText(cleanDigits);
 
-      setScannedCode(cleanDigits);
-      const existing = findItemByBarcode(items, cleanDigits);
-
-      if (existing) {
-        // Pop-up 1: "Add to existing inventory"
-        setMatchedItem(existing);
-        setQuantityToAdd(1);
-        setModalType('existing_item');
-      } else {
-        // Pop-up 2: "Add to inventory" (clean fields, no automatic brand predictor)
-        setMatchedItem(null);
-        setNewProductName('');
-        setNewProductPrice('');
-        setNewProductBrand('');
-        setNewProductSize(100);
-        setNewProductType('Eau de Parfum');
-        setNewProductGender('Unisex');
-        setNewProductLocation('Shelf A - Row 1');
-        setNewProductInitialStock(5);
-        setModalType('new_item_confirm');
+      if (processTimerRef.current) {
+        window.clearTimeout(processTimerRef.current);
       }
+
+      const delayMs = immediate ? 350 : 650;
+
+      processTimerRef.current = window.setTimeout(() => {
+        setIsProcessingScan(false);
+        setProcessingBarcodeText('');
+        const existing = findItemByBarcode(items, cleanDigits);
+        const canonicalCode = existing ? cleanBarcodeDigits(existing.barcode) : cleanDigits;
+        setScannedCode(canonicalCode);
+
+        if (existing) {
+          setMatchedItem(existing);
+          setQuantityToAdd(1);
+          setStockReason('New Delivery / Restock');
+          setModalType('existing_item');
+        } else {
+          setMatchedItem(null);
+          setNewProductName('');
+          setNewProductPrice('');
+          setNewProductBrand('');
+          setNewProductSize(100);
+          setNewProductType('Eau de Parfum');
+          setNewProductGender('Unisex');
+          setNewProductLocation('Shelf A - Row 1');
+          setNewProductInitialStock(5);
+          setModalType('new_item_confirm');
+        }
+      }, delayMs);
     },
     [items]
   );
 
-  // Decode a canvas with ZXing using GlobalHistogram and Hybrid binarizers
+  // Decode a grayscale Uint8ClampedArray buffer directly with ZXing (GlobalHistogram + Hybrid + Inverted)
+  const decodeGrayBufferWithZXing = useCallback(
+    (gray: Uint8ClampedArray, width: number, height: number): { isQr: boolean; text?: string; format?: string } | null => {
+      if (!width || !height) return null;
+      const reader = getZxingReader();
+      try {
+        const source = new RGBLuminanceSource(gray, width, height);
+
+        // Attempt 1: GlobalHistogramBinarizer (highest accuracy for 1D retail barcodes)
+        try {
+          const bitmap = new BinaryBitmap(new GlobalHistogramBinarizer(source));
+          const result = reader.decode(bitmap);
+          if (result) {
+            const fmt = String(result.getBarcodeFormat());
+            const isQr = result.getBarcodeFormat() === BarcodeFormat.QR_CODE;
+            return { isQr, text: result.getText(), format: fmt };
+          }
+        } catch {
+          // Next
+        } finally {
+          reader.reset();
+        }
+
+        // Attempt 2: HybridBinarizer (handles uneven shadow/glare gradients across cellophane)
+        try {
+          const bitmap = new BinaryBitmap(new HybridBinarizer(source));
+          const result = reader.decode(bitmap);
+          if (result) {
+            const fmt = String(result.getBarcodeFormat());
+            const isQr = result.getBarcodeFormat() === BarcodeFormat.QR_CODE;
+            return { isQr, text: result.getText(), format: fmt };
+          }
+        } catch {
+          // Next
+        } finally {
+          reader.reset();
+        }
+      } catch {
+        // Miss
+      }
+      return null;
+    },
+    [getZxingReader]
+  );
+
+  // Decode a canvas with ZXing using GlobalHistogram, Hybrid, and Inverted binarizers
   const decodeCanvasWithZXing = useCallback(
-    (canvas: HTMLCanvasElement): { isQr: boolean; text?: string } | null => {
+    (canvas: HTMLCanvasElement, includeAdaptivePass: boolean = false): { isQr: boolean; text?: string; format?: string } | null => {
       if (!canvas.width || !canvas.height) return null;
       const reader = getZxingReader();
       try {
         const luminanceSource = new HTMLCanvasElementLuminanceSource(canvas);
 
-        // Attempt 1: GlobalHistogramBinarizer (best for 1D retail barcodes)
+        // Attempt 1: GlobalHistogramBinarizer
         try {
           const bitmap = new BinaryBitmap(new GlobalHistogramBinarizer(luminanceSource));
           const result = reader.decode(bitmap);
           if (result) {
             const isQr = result.getBarcodeFormat() === BarcodeFormat.QR_CODE;
-            return { isQr, text: result.getText() };
+            return { isQr, text: result.getText(), format: String(result.getBarcodeFormat()) };
           }
         } catch {
-          // Fall through to attempt 2
+          // Fall through
         } finally {
           reader.reset();
         }
@@ -200,38 +288,49 @@ export const ScanView: React.FC = () => {
           const result = reader.decode(bitmap);
           if (result) {
             const isQr = result.getBarcodeFormat() === BarcodeFormat.QR_CODE;
-            return { isQr, text: result.getText() };
+            return { isQr, text: result.getText(), format: String(result.getBarcodeFormat()) };
           }
         } catch {
-          //Fall through to attempt 3 (inverted luminance for dark/metallic packaging)
+          // Fall through
         } finally {
           reader.reset();
         }
 
-        // Attempt 3: Inverted Luminance (handles light bars on dark/gold perfume boxes)
+        // Attempt 3: Inverted Luminance (handles light/metallic gold bars on dark luxury perfume boxes)
         try {
           const invertedSource = luminanceSource.invert();
-          const bitmap = new BinaryBitmap(new HybridBinarizer(invertedSource));
+          const bitmap = new BinaryBitmap(new GlobalHistogramBinarizer(invertedSource));
           const result = reader.decode(bitmap);
           if (result) {
             const isQr = result.getBarcodeFormat() === BarcodeFormat.QR_CODE;
-            return { isQr, text: result.getText() };
+            return { isQr, text: result.getText(), format: String(result.getBarcodeFormat()) };
           }
         } catch {
           // Miss
         } finally {
           reader.reset();
         }
+
+        // Attempt 4: Adaptive 5th-95th Percentile Contrast Stretch + 1D Horizontal Unsharp Mask
+        if (includeAdaptivePass) {
+          const ctx = canvas.getContext('2d', { willReadFrequently: true });
+          if (ctx) {
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const enhanced = enhanceBarcodeLuminance(imgData.data, canvas.width, canvas.height, true);
+            const enhancedHit = decodeGrayBufferWithZXing(enhanced, canvas.width, canvas.height);
+            if (enhancedHit) return enhancedHit;
+          }
+        }
       } catch {
         // General decode miss
       }
       return null;
     },
-    [getZxingReader]
+    [getZxingReader, decodeGrayBufferWithZXing]
   );
 
-  // Process a live video frame with high-accuracy multi-pass pipeline
-  const decodeVideoFrame = useCallback(async (): Promise<{ isQr: boolean; text?: string } | null> => {
+  // Process a live video frame with our 6-Stage High-Precision ISP Pipeline
+  const decodeVideoFrame = useCallback(async (): Promise<{ isQr: boolean; text?: string; format?: string } | null> => {
     const video = videoRef.current;
     if (!video || video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
       return null;
@@ -240,106 +339,200 @@ export const ScanView: React.FC = () => {
     const vw = video.videoWidth;
     const vh = video.videoHeight;
 
-    // PASS 1: Native BarcodeDetector on full video element (hardware accelerated)
+    // STAGE 1: Native BarcodeDetector on raw Full-HD video element (hardware-accelerated)
     if (nativeDetectorRef.current) {
       try {
         const detected = await nativeDetectorRef.current.detect(video);
         if (detected && detected.length > 0) {
           const first = detected[0];
-          const isQr = first.format === 'qr_code' || String(first.format).toLowerCase().includes('qr');
-          return { isQr, text: first.rawValue };
+          const fmt = String(first.format || '').toLowerCase();
+          const isQr = fmt === 'qr_code' || fmt.includes('qr');
+          if (isQr || cleanBarcodeDigits(first.rawValue).length >= 8) {
+            return { isQr, text: first.rawValue, format: fmt };
+          }
         }
       } catch {
-        // Continue to canvas passes
+        // Continue to canvas stages
       }
     }
 
-    // PASS 2: Center Viewfinder Band Crop (eliminates background clutter around the 1D barcode)
-    if (!cropCanvasRef.current) cropCanvasRef.current = document.createElement('canvas');
-    const cropCanvas = cropCanvasRef.current;
-    const sx = Math.floor(vw * 0.08);
-    const sy = Math.floor(vh * 0.22);
-    const sw = Math.floor(vw * 0.84);
-    const sh = Math.floor(vh * 0.56);
-    const cropTargetW = Math.min(sw, 960);
-    const cropTargetH = Math.max(1, Math.floor((sh * cropTargetW) / sw));
-    if (cropCanvas.width !== cropTargetW) cropCanvas.width = cropTargetW;
-    if (cropCanvas.height !== cropTargetH) cropCanvas.height = cropTargetH;
+    // STAGE 2: Tight 1:1 Native Resolution Laser-Band Strip (eliminates box text/logos & glare above/below bars)
+    if (!laserStripCanvasRef.current) laserStripCanvasRef.current = document.createElement('canvas');
+    const stripCanvas = laserStripCanvasRef.current;
+    const stripX = Math.floor(vw * 0.08);
+    const stripY = Math.floor(vh * 0.34);
+    const stripW = Math.floor(vw * 0.84);
+    const stripH = Math.floor(vh * 0.32);
+    // Preserve native 1:1 sensor pixels (up to 1440px wide) so thin 1-module bars never blur
+    const nativeW = Math.min(stripW, 1440);
+    const nativeH = Math.max(1, Math.floor((stripH * nativeW) / stripW));
+    if (stripCanvas.width !== nativeW) stripCanvas.width = nativeW;
+    if (stripCanvas.height !== nativeH) stripCanvas.height = nativeH;
 
-    const cropCtx = cropCanvas.getContext('2d', { willReadFrequently: true });
-    if (cropCtx) {
-      cropCtx.filter = 'none';
-      cropCtx.drawImage(video, sx, sy, sw, sh, 0, 0, cropTargetW, cropTargetH);
+    const stripCtx = stripCanvas.getContext('2d', { willReadFrequently: true });
+    if (stripCtx) {
+      stripCtx.imageSmoothingEnabled = false;
+      stripCtx.filter = 'none';
+      stripCtx.drawImage(video, stripX, stripY, stripW, stripH, 0, 0, nativeW, nativeH);
 
       if (nativeDetectorRef.current) {
         try {
-          const detectedCrop = await nativeDetectorRef.current.detect(cropCanvas);
-          if (detectedCrop && detectedCrop.length > 0) {
-            const first = detectedCrop[0];
-            const isQr = first.format === 'qr_code' || String(first.format).toLowerCase().includes('qr');
-            return { isQr, text: first.rawValue };
+          const detectedStrip = await nativeDetectorRef.current.detect(stripCanvas);
+          if (detectedStrip && detectedStrip.length > 0) {
+            const first = detectedStrip[0];
+            const fmt = String(first.format || '').toLowerCase();
+            const isQr = fmt === 'qr_code' || fmt.includes('qr');
+            if (isQr || cleanBarcodeDigits(first.rawValue).length >= 8) {
+              return { isQr, text: first.rawValue, format: fmt };
+            }
           }
         } catch {
           // Continue
         }
       }
 
-      const cropHit = decodeCanvasWithZXing(cropCanvas);
-      if (cropHit) return cropHit;
+      // Stage 2 + Stage 3: Raw ZXing + Adaptive 5th-95th Percentile Contrast Stretch & 1D Horizontal Unsharp Mask
+      const stripHit = decodeCanvasWithZXing(stripCanvas, true);
+      if (stripHit && (stripHit.isQr || cleanBarcodeDigits(stripHit.text || '').length >= 8)) {
+        return stripHit;
+      }
+
+      // STAGE 4: 1.6x Upscaled Center Strip for small 30mL/50mL perfume barcodes held further from webcam
+      if (!upscaleCanvasRef.current) upscaleCanvasRef.current = document.createElement('canvas');
+      const upCanvas = upscaleCanvasRef.current;
+      const upW = Math.min(1600, Math.floor(nativeW * 1.55));
+      const upH = Math.max(1, Math.floor(nativeH * 1.55));
+      if (upCanvas.width !== upW) upCanvas.width = upW;
+      if (upCanvas.height !== upH) upCanvas.height = upH;
+      const upCtx = upCanvas.getContext('2d', { willReadFrequently: true });
+      if (upCtx) {
+        upCtx.imageSmoothingEnabled = false;
+        upCtx.drawImage(stripCanvas, 0, 0, upW, upH);
+        const upHit = decodeCanvasWithZXing(upCanvas, true);
+        if (upHit && (upHit.isQr || cleanBarcodeDigits(upHit.text || '').length >= 8)) {
+          return upHit;
+        }
+      }
     }
 
-    // PASS 3: High-Contrast Sharpened Center Band (reads low-light, glossy cellophane, or low-contrast webcams)
-    if (!contrastCanvasRef.current) contrastCanvasRef.current = document.createElement('canvas');
-    const contrastCanvas = contrastCanvasRef.current;
-    if (contrastCanvas.width !== cropTargetW) contrastCanvas.width = cropTargetW;
-    if (contrastCanvas.height !== cropTargetH) contrastCanvas.height = cropTargetH;
-    const contrastCtx = contrastCanvas.getContext('2d', { willReadFrequently: true });
-    if (contrastCtx) {
-      contrastCtx.filter = 'contrast(1.75) brightness(1.08) grayscale(1)';
-      contrastCtx.drawImage(video, sx, sy, sw, sh, 0, 0, cropTargetW, cropTargetH);
-      const contrastHit = decodeCanvasWithZXing(contrastCanvas);
-      if (contrastHit) return contrastHit;
+    // STAGE 5: Full Viewfinder Box Crop (in case barcode is positioned near top or bottom of frame)
+    if (!cropCanvasRef.current) cropCanvasRef.current = document.createElement('canvas');
+    const cropCanvas = cropCanvasRef.current;
+    const sx = Math.floor(vw * 0.08);
+    const sy = Math.floor(vh * 0.2);
+    const sw = Math.floor(vw * 0.84);
+    const sh = Math.floor(vh * 0.6);
+    const cropTargetW = Math.min(sw, 1100);
+    const cropTargetH = Math.max(1, Math.floor((sh * cropTargetW) / sw));
+    if (cropCanvas.width !== cropTargetW) cropCanvas.width = cropTargetW;
+    if (cropCanvas.height !== cropTargetH) cropCanvas.height = cropTargetH;
+
+    const cropCtx = cropCanvas.getContext('2d', { willReadFrequently: true });
+    if (cropCtx) {
+      cropCtx.imageSmoothingEnabled = false;
+      cropCtx.filter = 'none';
+      cropCtx.drawImage(video, sx, sy, sw, sh, 0, 0, cropTargetW, cropTargetH);
+      const cropHit = decodeCanvasWithZXing(cropCanvas, true);
+      if (cropHit && (cropHit.isQr || cleanBarcodeDigits(cropHit.text || '').length >= 8)) {
+        return cropHit;
+      }
     }
 
-    // PASS 4: Full-frame ZXing decode
+    // STAGE 6: Full-frame + 90-Degree Rotated Pass (when bottle is held vertically)
     if (!fullCanvasRef.current) fullCanvasRef.current = document.createElement('canvas');
     const fullCanvas = fullCanvasRef.current;
-    const targetW = Math.min(vw, 900);
+    const targetW = Math.min(vw, 1024);
     const targetH = Math.max(1, Math.floor((vh * targetW) / vw));
     if (fullCanvas.width !== targetW) fullCanvas.width = targetW;
     if (fullCanvas.height !== targetH) fullCanvas.height = targetH;
     const fullCtx = fullCanvas.getContext('2d', { willReadFrequently: true });
     if (!fullCtx) return null;
 
-    fullCtx.filter = 'none';
+    fullCtx.imageSmoothingEnabled = false;
     fullCtx.drawImage(video, 0, 0, targetW, targetH);
-    let hit = decodeCanvasWithZXing(fullCanvas);
-    if (hit) return hit;
+    let hit = decodeCanvasWithZXing(fullCanvas, false);
+    if (hit && (hit.isQr || cleanBarcodeDigits(hit.text || '').length >= 8)) return hit;
 
-    // PASS 5: Rotated 90 degrees (in case user holds perfume barcode vertically)
     if (!rotCanvasRef.current) rotCanvasRef.current = document.createElement('canvas');
     const rotated = rotCanvasRef.current;
     if (rotated.width !== targetH) rotated.width = targetH;
     if (rotated.height !== targetW) rotated.height = targetW;
     const rotCtx = rotated.getContext('2d', { willReadFrequently: true });
     if (rotCtx) {
+      rotCtx.imageSmoothingEnabled = false;
       rotCtx.save();
       rotCtx.translate(targetH / 2, targetW / 2);
       rotCtx.rotate(Math.PI / 2);
       rotCtx.drawImage(fullCanvas, -targetW / 2, -targetH / 2);
       rotCtx.restore();
-      hit = decodeCanvasWithZXing(rotated);
-      if (hit) return hit;
+      hit = decodeCanvasWithZXing(rotated, true);
+      if (hit && (hit.isQr || cleanBarcodeDigits(hit.text || '').length >= 8)) return hit;
     }
 
     return null;
   }, [decodeCanvasWithZXing]);
 
-  // Start Camera Stream with high-resolution & continuous autofocus constraints
+  // Trigger camera autofocus & exposure recalibration on demand
+  const handleTriggerRefocus = useCallback(async () => {
+    const stream = streamRef.current;
+    if (!stream) return;
+    const videoTrack = stream.getVideoTracks()[0];
+    if (!videoTrack || typeof videoTrack.getCapabilities !== 'function') return;
+
+    setIsRefocusing(true);
+    try {
+      const caps: any = videoTrack.getCapabilities();
+      const adv: Record<string, any> = {};
+      if (caps?.focusMode && Array.isArray(caps.focusMode)) {
+        if (caps.focusMode.includes('single-shot')) {
+          await videoTrack.applyConstraints({ advanced: [{ focusMode: 'single-shot' } as any] });
+        }
+        if (caps.focusMode.includes('continuous')) {
+          adv.focusMode = 'continuous';
+        }
+      }
+      if (caps?.exposureMode && Array.isArray(caps.exposureMode) && caps.exposureMode.includes('continuous')) {
+        adv.exposureMode = 'continuous';
+      }
+      if (Object.keys(adv).length > 0) {
+        await videoTrack.applyConstraints({ advanced: [adv as any] });
+      }
+    } catch {
+      // Ignore if hardware doesn't support manual focus reset
+    } finally {
+      window.setTimeout(() => setIsRefocusing(false), 450);
+    }
+  }, []);
+
+  // Toggle hardware camera torch/flashlight if available
+  const handleToggleTorch = useCallback(async () => {
+    const stream = streamRef.current;
+    if (!stream) return;
+    const videoTrack = stream.getVideoTracks()[0];
+    if (!videoTrack) return;
+    const nextState = !torchOn;
+    try {
+      await videoTrack.applyConstraints({ advanced: [{ torch: nextState } as any] });
+      setTorchOn(nextState);
+    } catch {
+      // Ignore if unsupported
+    }
+  }, [torchOn]);
+
+  // Start Camera Stream with Full-HD 1080p unzoomed resolution & continuous autofocus constraints
   const startCamera = useCallback(async () => {
     setCameraError(null);
+    setTorchOn(false);
+    setSupportsTorch(false);
+    frameSamplesRef.current = [];
+    setConsensusState(null);
+
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setCameraError('Camera stream not supported in this browser. Use photo upload or manual entry below.');
+      setCameraError(
+        window.location.hostname !== 'localhost' && window.location.protocol === 'http:'
+          ? 'Camera requires a secure connection. Open http://localhost:3000 instead of the IP address.'
+          : 'Camera stream not supported in this browser. Use photo upload or manual entry below.'
+      );
       return;
     }
 
@@ -350,31 +543,68 @@ export const ScanView: React.FC = () => {
 
       let stream: MediaStream;
       try {
+        // Request Full-HD 1920x1080 first so thin 1D barcode modules have maximum horizontal pixel density
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { ideal: 'environment' },
             width: { ideal: 1920 },
             height: { ideal: 1080 },
+            frameRate: { ideal: 30 },
           },
           audio: false,
         });
       } catch {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: false,
-        });
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: { ideal: 'environment' },
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+            },
+            audio: false,
+          });
+        } catch {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false,
+          });
+        }
       }
 
-      // Enable continuous autofocus if the device camera supports it
+      // Ensure 1x normal (unzoomed) view, continuous autofocus, and continuous exposure
       const videoTrack = stream.getVideoTracks()[0];
-      if (videoTrack && typeof videoTrack.getCapabilities === 'function') {
-        try {
-          const caps: any = videoTrack.getCapabilities();
-          if (caps?.focusMode && Array.isArray(caps.focusMode) && caps.focusMode.includes('continuous')) {
-            await videoTrack.applyConstraints({ advanced: [{ focusMode: 'continuous' } as any] });
+      if (videoTrack) {
+        const settings = videoTrack.getSettings?.();
+        if (settings?.width && settings?.height) {
+          setCameraResolution(`${settings.width}×${settings.height}`);
+        }
+        if (typeof videoTrack.getCapabilities === 'function') {
+          try {
+            const caps: any = videoTrack.getCapabilities();
+            if (caps?.torch) {
+              setSupportsTorch(true);
+            }
+            const advancedConstraints: Record<string, any> = {};
+            if (caps?.focusMode && Array.isArray(caps.focusMode) && caps.focusMode.includes('continuous')) {
+              advancedConstraints.focusMode = 'continuous';
+            }
+            if (caps?.exposureMode && Array.isArray(caps.exposureMode) && caps.exposureMode.includes('continuous')) {
+              advancedConstraints.exposureMode = 'continuous';
+            }
+            if (caps?.whiteBalanceMode && Array.isArray(caps.whiteBalanceMode) && caps.whiteBalanceMode.includes('continuous')) {
+              advancedConstraints.whiteBalanceMode = 'continuous';
+            }
+            if (caps?.zoom && typeof caps.zoom === 'object') {
+              const minZoom = typeof caps.zoom.min === 'number' ? caps.zoom.min : 1;
+              const maxZoom = typeof caps.zoom.max === 'number' ? caps.zoom.max : 1;
+              advancedConstraints.zoom = Math.min(Math.max(1, minZoom), maxZoom);
+            }
+            if (Object.keys(advancedConstraints).length > 0) {
+              await videoTrack.applyConstraints({ advanced: [advancedConstraints as any] });
+            }
+          } catch {
+            // Ignore if advanced camera constraints are not supported
           }
-        } catch {
-          // Ignore if advanced focus constraint is not supported
         }
       }
 
@@ -386,6 +616,12 @@ export const ScanView: React.FC = () => {
         vid.setAttribute('playsinline', 'true');
         vid.setAttribute('autoplay', 'true');
         vid.muted = true;
+
+        vid.onloadedmetadata = () => {
+          if (vid.videoWidth && vid.videoHeight) {
+            setCameraResolution(`${vid.videoWidth}×${vid.videoHeight}`);
+          }
+        };
 
         const playPromise = vid.play();
         if (playPromise !== undefined) {
@@ -404,10 +640,10 @@ export const ScanView: React.FC = () => {
     }
   }, []);
 
-  // Run camera lifecycle and fast scan loop
+  // Run camera lifecycle and high-frequency multi-frame consensus scan loop (~13 FPS / 75ms interval)
   useEffect(() => {
     if (initialBarcodeForScan) {
-      processBarcode(initialBarcodeForScan);
+      processBarcode(initialBarcodeForScan, true);
       setInitialBarcodeForScan(null);
     }
 
@@ -415,26 +651,49 @@ export const ScanView: React.FC = () => {
 
     let lastTick = 0;
     let isMounted = true;
+    let isFrameBusy = false;
 
     const scanLoop = async (time: number) => {
       if (!isMounted) return;
 
-      // Scan every ~90ms (~11 FPS) for snappy barcode capture
-      if (time - lastTick > 90) {
+      if (time - lastTick > 75 && !isFrameBusy) {
         lastTick = time;
         if (
           !isProcessingRef.current &&
           modalType === null &&
           Date.now() >= ignoreUntilRef.current
         ) {
-          const hit = await decodeVideoFrame();
-          if (hit && isMounted) {
-            if (hit.isQr) {
-              setQrDetected(true);
-            } else if (hit.text) {
-              setQrDetected(false);
-              processBarcode(hit.text);
+          isFrameBusy = true;
+          try {
+            const hit = await decodeVideoFrame();
+            const now = Date.now();
+            // Prune expired samples older than 950ms
+            frameSamplesRef.current = frameSamplesRef.current.filter((s) => now - s.timestamp <= 950);
+
+            if (hit && isMounted) {
+              if (hit.isQr) {
+                setQrDetected(true);
+                setConsensusState(null);
+              } else if (hit.text) {
+                setQrDetected(false);
+                frameSamplesRef.current.push({
+                  code: hit.text,
+                  format: hit.format,
+                  timestamp: now,
+                });
+
+                const consensus = evaluateBarcodeConsensus(frameSamplesRef.current, items, now, 950);
+                setConsensusState(consensus.matchCount > 0 ? consensus : null);
+
+                if (consensus.locked && consensus.code) {
+                  processBarcode(consensus.code, false);
+                }
+              }
+            } else if (frameSamplesRef.current.length === 0) {
+              setConsensusState(null);
             }
+          } finally {
+            isFrameBusy = false;
           }
         }
       }
@@ -447,13 +706,14 @@ export const ScanView: React.FC = () => {
     return () => {
       isMounted = false;
       if (scanLoopRef.current) cancelAnimationFrame(scanLoopRef.current);
+      if (processTimerRef.current) window.clearTimeout(processTimerRef.current);
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((t) => t.stop());
       }
     };
-  }, [startCamera, processBarcode, modalType, decodeVideoFrame, initialBarcodeForScan, setInitialBarcodeForScan]);
+  }, [startCamera, processBarcode, modalType, decodeVideoFrame, initialBarcodeForScan, setInitialBarcodeForScan, items]);
 
-  // Photo / Image File Upload Scanner with multi-pass enhancement
+  // Photo / Image File Upload Scanner with multi-scale & adaptive luminance enhancement
   const handlePhotoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -461,7 +721,7 @@ export const ScanView: React.FC = () => {
     try {
       const bmp = await createImageBitmap(file);
 
-      // 1. Try native detector first on image bitmap
+      // 1. Try native detector first on full image bitmap
       if (nativeDetectorRef.current) {
         try {
           const detected = await nativeDetectorRef.current.detect(bmp);
@@ -471,45 +731,66 @@ export const ScanView: React.FC = () => {
               setQrDetected(true);
               return;
             }
-            processBarcode(first.rawValue);
+            processBarcode(first.rawValue, true);
             return;
           }
         } catch {
-          // Fallback to ZXing
+          // Fallback to multi-pass ZXing
         }
       }
 
-      // 2. Multi-pass ZXing on uploaded image (Normal, High-Contrast, Rotated)
-      const canvas = document.createElement('canvas');
-      const maxDim = 1200;
-      const scale = bmp.width > maxDim ? maxDim / bmp.width : 1;
-      canvas.width = Math.max(1, Math.floor(bmp.width * scale));
-      canvas.height = Math.max(1, Math.floor(bmp.height * scale));
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      if (ctx) {
-        // Normal pass
-        ctx.filter = 'none';
-        ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
-        let hit = decodeCanvasWithZXing(canvas);
+      // 2. Multi-scale + Adaptive Contrast + Center Crop + Rotated ZXing passes
+      const scales = [1, 1.5, 0.75];
+      for (const sc of scales) {
+        const canvas = document.createElement('canvas');
+        const maxDim = Math.round(1400 * sc);
+        const ratio = bmp.width > maxDim ? maxDim / bmp.width : sc;
+        canvas.width = Math.max(1, Math.floor(bmp.width * ratio));
+        canvas.height = Math.max(1, Math.floor(bmp.height * ratio));
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        if (!ctx) continue;
 
-        // High-contrast pass
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+
+        // Pass A: Full image + Adaptive 5th-95th percentile unsharp pass
+        let hit = decodeCanvasWithZXing(canvas, true);
+
+        // Pass B: Center horizontal band crop (isolates barcode from packaging text)
         if (!hit) {
-          ctx.filter = 'contrast(1.8) brightness(1.08) grayscale(1)';
-          ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
-          hit = decodeCanvasWithZXing(canvas);
+          const bandCanvas = document.createElement('canvas');
+          bandCanvas.width = canvas.width;
+          bandCanvas.height = Math.max(1, Math.floor(canvas.height * 0.45));
+          const bCtx = bandCanvas.getContext('2d', { willReadFrequently: true });
+          if (bCtx) {
+            bCtx.imageSmoothingEnabled = false;
+            bCtx.drawImage(
+              canvas,
+              0,
+              Math.floor(canvas.height * 0.27),
+              canvas.width,
+              bandCanvas.height,
+              0,
+              0,
+              bandCanvas.width,
+              bandCanvas.height
+            );
+            hit = decodeCanvasWithZXing(bandCanvas, true);
+          }
         }
 
-        // Rotated 90 deg pass
+        // Pass C: Rotated 90 deg pass
         if (!hit) {
           const rotCanvas = document.createElement('canvas');
           rotCanvas.width = canvas.height;
           rotCanvas.height = canvas.width;
           const rCtx = rotCanvas.getContext('2d', { willReadFrequently: true });
           if (rCtx) {
+            rCtx.imageSmoothingEnabled = false;
             rCtx.translate(rotCanvas.width / 2, rotCanvas.height / 2);
             rCtx.rotate(Math.PI / 2);
             rCtx.drawImage(canvas, -canvas.width / 2, -canvas.height / 2);
-            hit = decodeCanvasWithZXing(rotCanvas);
+            hit = decodeCanvasWithZXing(rotCanvas, true);
           }
         }
 
@@ -519,11 +800,12 @@ export const ScanView: React.FC = () => {
             return;
           }
           if (hit.text) {
-            processBarcode(hit.text);
+            processBarcode(hit.text, true);
             return;
           }
         }
       }
+
       showToast('No barcode detected in uploaded photo. Please ensure barcode is clear or enter the digits below.');
     } catch {
       showToast('Failed to process image. Please try another photo or enter manually.');
@@ -532,11 +814,11 @@ export const ScanView: React.FC = () => {
     }
   };
 
-  // Submit Handler: Add stock to existing item in inventory
+  // Submit Handler: Add stock to existing item in inventory with audit reason
   const handleAddStockConfirm = async () => {
     if (!matchedItem) return;
     const qty = Math.max(1, quantityToAdd);
-    await addStock(matchedItem.id, qty);
+    await addStock(matchedItem.id, qty, stockReason);
     closeModal();
   };
 
@@ -572,12 +854,21 @@ export const ScanView: React.FC = () => {
   };
 
   return (
-    <div className="space-y-5 max-w-2xl mx-auto pb-20 md:pb-6">
+    <div className="space-y-3.5 sm:space-y-5 max-w-2xl mx-auto pb-8">
       {/* View Header */}
-      <div>
-        <h2 className="font-serif text-2xl font-bold text-[#242119]">
-          Scan Barcode
-        </h2>
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <h2 className="font-serif text-xl sm:text-2xl font-bold text-[#242119]">
+            Scan Barcode
+          </h2>
+          <p className="text-xs text-[#7c7156]">
+            Multi-frame verified EAN-13, UPC-A &amp; Code-128 precision scanner
+          </p>
+        </div>
+        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#eef2ec] border border-[#c9d8c5] text-[#57795c] text-[11px] font-semibold shrink-0">
+          <ShieldCheck className="w-3.5 h-3.5" />
+          <span>GS1 &amp; Multi-Pass Lock</span>
+        </div>
       </div>
 
       {/* QR CODE WARNING: Displayed whenever a QR code is spotted in the camera or photo */}
@@ -598,43 +889,110 @@ export const ScanView: React.FC = () => {
       )}
 
       {/* Main Scanner Section (Live Camera Viewfinder) */}
-      <div className="bg-white border border-[#e7e2d4] rounded-2xl p-4 sm:p-5 shadow-xs space-y-4">
+      <div className="bg-white border border-[#e7e2d4] rounded-2xl p-3.5 sm:p-5 shadow-xs space-y-3.5 sm:space-y-4">
         {/* Live Camera Viewfinder */}
-        <div className="relative aspect-16/10 w-full bg-[#1b1915] rounded-xl overflow-hidden border border-[#e7e2d4] flex flex-col items-center justify-center">
+        <div
+          onClick={handleTriggerRefocus}
+          className="relative aspect-4/3 w-full max-h-[360px] sm:max-h-[420px] bg-[#1b1915] rounded-xl overflow-hidden border border-[#e7e2d4] flex flex-col items-center justify-center cursor-pointer"
+          title="Tap viewfinder to refocus camera"
+        >
           <video
             ref={videoRef}
             playsInline
             muted
             autoPlay
-            className="w-full h-full object-cover"
+            className="w-full h-full object-contain"
           />
 
           {/* Active Viewfinder Target Box */}
-          <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center">
-            <div className="w-4/5 sm:w-2/3 h-1/2 border-2 border-dashed border-[#efeadc]/90 rounded-xl relative flex items-center justify-center shadow-inner">
-              {/* Laser guideline */}
-              <div className="w-full h-0.5 bg-[#9c8f6f] shadow-[0_0_8px_#9c8f6f] animate-pulse absolute" />
+          {!cameraError && (
+            <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center">
+              <div
+                className={`w-4/5 sm:w-3/4 h-2/5 border-2 rounded-xl relative flex items-center justify-center shadow-inner transition-colors duration-150 ${
+                  consensusState && consensusState.matchCount > 0
+                    ? 'border-[#57795c] bg-[#57795c]/10'
+                    : isRefocusing
+                    ? 'border-[#d4af37]'
+                    : 'border-dashed border-[#efeadc]/90'
+                }`}
+              >
+                {/* Laser guideline */}
+                <div
+                  className={`w-full h-0.5 absolute transition-colors ${
+                    consensusState && consensusState.matchCount > 0
+                      ? 'bg-[#57795c] shadow-[0_0_10px_#57795c]'
+                      : 'bg-[#9c8f6f] shadow-[0_0_8px_#9c8f6f] animate-pulse'
+                  }`}
+                />
+              </div>
+              <span className="mt-3 px-3 py-1 rounded-full bg-black/75 text-[11px] font-mono text-white tracking-wide">
+                {consensusState && consensusState.matchCount > 0
+                  ? `Verifying ${consensusState.code} (${consensusState.matchCount}/${consensusState.requiredCount} frames)...`
+                  : isRefocusing
+                  ? 'Refocusing optics...'
+                  : 'Align barcode along center laser line (Tap to refocus)'}
+              </span>
             </div>
-            <span className="mt-3 px-3 py-1 rounded-full bg-black/70 text-[11px] font-mono text-white tracking-wide">
-              Align 13-digit barcode in frame
-            </span>
-          </div>
+          )}
 
           {/* Camera Controls Overlay */}
-          <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5 z-10">
-            <button
-              type="button"
-              onClick={startCamera}
-              title="Restart Camera"
-              className="p-2 rounded-lg bg-black/60 text-white hover:bg-black/80 transition-colors"
+          {!cameraError && (
+            <div
+              className="absolute top-2.5 right-2.5 flex items-center gap-1.5 z-10"
+              onClick={(e) => e.stopPropagation()}
             >
-              <RefreshCw className="w-4 h-4" />
-            </button>
-          </div>
+              {supportsTorch && (
+                <button
+                  type="button"
+                  onClick={handleToggleTorch}
+                  title={torchOn ? 'Turn Off Torch' : 'Turn On Torch'}
+                  className={`p-2 rounded-lg transition-colors ${
+                    torchOn ? 'bg-[#d4af37] text-[#1b1915]' : 'bg-black/60 text-white hover:bg-black/80'
+                  }`}
+                >
+                  <Zap className="w-4 h-4" />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleTriggerRefocus}
+                title="Refocus Camera"
+                className="p-2 rounded-lg bg-black/60 text-white hover:bg-black/80 transition-colors"
+              >
+                <Focus className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={startCamera}
+                title="Restart Camera"
+                className="p-2 rounded-lg bg-black/60 text-white hover:bg-black/80 transition-colors"
+              >
+                <RefreshCw className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          {/* Barcode Verified Lock Overlay */}
+          {isProcessingScan && (
+            <div className="absolute inset-0 bg-[#1b1915]/85 backdrop-blur-xs flex flex-col items-center justify-center text-center z-30 animate-fadeIn p-4">
+              <div className="w-11 h-11 rounded-2xl bg-[#57795c]/30 border border-[#57795c] flex items-center justify-center mb-2.5">
+                <CheckCircle2 className="w-6 h-6 text-[#eef2ec]" />
+              </div>
+              <div className="text-xs sm:text-sm font-bold text-white tracking-wide">
+                Barcode Verified &amp; Locked
+              </div>
+              <div className="text-sm font-mono font-bold text-[#efeadc] mt-1 tracking-widest">
+                {processingBarcodeText}
+              </div>
+            </div>
+          )}
 
           {/* Camera error fallback overlay */}
-          {cameraError && (
-            <div className="absolute inset-0 bg-[#faf8f4]/95 p-4 flex flex-col items-center justify-center text-center z-20">
+          {cameraError && !isProcessingScan && (
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="absolute inset-0 bg-[#faf8f4] p-4 flex flex-col items-center justify-center text-center z-20 cursor-default"
+            >
               <AlertTriangle className="w-7 h-7 text-[#9c793c] mb-2" />
               <p className="text-xs text-[#56534a] max-w-xs">{cameraError}</p>
               <button
@@ -663,8 +1021,24 @@ export const ScanView: React.FC = () => {
 
           {/* Status Indicator */}
           <div className="flex items-center justify-center sm:justify-start px-3.5 py-2 bg-[#faf8f4] border border-[#e7e2d4] rounded-xl text-xs text-[#56534a]">
-            <span className={`w-2 h-2 rounded-full mr-2 ${isCameraActive ? 'bg-[#57795c]' : 'bg-[#9c793c]'}`} />
-            <span>{isCameraActive ? 'Camera scanner active' : 'Camera stream initializing...'}</span>
+            <span
+              className={`w-2 h-2 rounded-full mr-2 shrink-0 ${
+                isProcessingScan
+                  ? 'bg-[#57795c] animate-ping'
+                  : isCameraActive
+                  ? 'bg-[#57795c]'
+                  : 'bg-[#7c7156]'
+              }`}
+            />
+            <span className="truncate">
+              {isProcessingScan
+                ? `Verified barcode ${processingBarcodeText}...`
+                : isCameraActive
+                ? `6-Pass HD Scanner Active${cameraResolution ? ` (${cameraResolution})` : ''}`
+                : cameraError
+                ? 'Ready for photo upload or manual barcode'
+                : 'Camera stream initializing...'}
+            </span>
           </div>
         </div>
 
@@ -686,7 +1060,7 @@ export const ScanView: React.FC = () => {
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault();
-                  if (manualCode.trim()) processBarcode(manualCode.trim());
+                  if (manualCode.trim()) processBarcode(manualCode.trim(), true);
                 }
               }}
               placeholder="e.g. 3145891265478"
@@ -694,16 +1068,25 @@ export const ScanView: React.FC = () => {
             />
             <button
               type="button"
+              disabled={isProcessingScan}
               onClick={() => {
                 if (!manualCode.trim()) {
                   setManualError('Enter a barcode number');
                   return;
                 }
-                processBarcode(manualCode.trim());
+                processBarcode(manualCode.trim(), true);
               }}
-              className="px-4 py-2 bg-[#9c8f6f] hover:bg-[#7c7156] text-white font-bold text-xs rounded-xl inline-flex items-center gap-1.5 transition-colors shadow-xs"
+              className="px-4 py-2 bg-[#9c8f6f] hover:bg-[#7c7156] disabled:opacity-60 text-white font-bold text-xs rounded-xl inline-flex items-center gap-1.5 transition-colors shadow-xs"
             >
-              <Plus className="w-3.5 h-3.5" /> ADD
+              {isProcessingScan ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Verifying...
+                </>
+              ) : (
+                <>
+                  <Plus className="w-3.5 h-3.5" /> ADD
+                </>
+              )}
             </button>
           </div>
           {manualError && <p className="text-xs text-[#a05539] font-medium">{manualError}</p>}
@@ -712,7 +1095,6 @@ export const ScanView: React.FC = () => {
 
       {/* =========================================================================
           POP-UP MODAL 1: "Add to Existing Inventory"
-          Brought back in the scan menu, strictly for adding stock to existing item!
          ========================================================================= */}
       {modalType === 'existing_item' && matchedItem && (
         <div
@@ -723,16 +1105,16 @@ export const ScanView: React.FC = () => {
           <div className="w-full max-w-md bg-white rounded-2xl border border-[#e7e2d4] shadow-2xl overflow-hidden my-auto animate-scaleUp">
             {/* Modal Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-[#e7e2d4] bg-[#faf8f4]">
-              <div className="flex items-center gap-2">
-                <Layers className="w-4 h-4 text-[#7c7156]" />
-                <h3 className="font-serif text-base font-bold text-[#242119]">
-                  Add to Existing Inventory
+              <div className="flex items-center gap-2 min-w-0">
+                <Layers className="w-4 h-4 text-[#7c7156] shrink-0" />
+                <h3 className="font-serif text-base font-bold text-[#242119] truncate">
+                  {matchedItem.name}
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={closeModal}
-                className="w-8 h-8 rounded-lg flex items-center justify-center text-[#56534a] hover:bg-[#f2efe6] transition-colors"
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-[#56534a] hover:bg-[#f2efe6] transition-colors shrink-0"
                 title="Close"
               >
                 <X className="w-4 h-4" />
@@ -812,6 +1194,29 @@ export const ScanView: React.FC = () => {
 
                 <div className="text-xs text-[#8c8878] pt-1">
                   New stock total: <strong className="text-[#242119]">{matchedItem.stock + quantityToAdd} pcs</strong>
+                </div>
+              </div>
+
+              {/* Reason for Stock Addition */}
+              <div className="space-y-1.5 pt-2 border-t border-[#f0ece0]">
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-[#56534a]">
+                  Reason for Stock Adjustment
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {SCAN_ADD_REASONS.map((reason) => (
+                    <button
+                      key={reason}
+                      type="button"
+                      onClick={() => setStockReason(reason)}
+                      className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border transition-colors whitespace-nowrap ${
+                        stockReason === reason
+                          ? 'bg-[#242119] text-white border-[#242119]'
+                          : 'bg-[#faf8f4] text-[#56534a] border-[#e7e2d4] hover:bg-[#f2efe6]'
+                      }`}
+                    >
+                      {reason}
+                    </button>
+                  ))}
                 </div>
               </div>
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Lock, ShieldAlert } from 'lucide-react';
+import { X, Lock, Sparkles, Check } from 'lucide-react';
 import { useInventory } from '../context/InventoryContext.js';
 import {
   validateProductName,
@@ -21,6 +21,8 @@ export const ItemEditModal: React.FC = () => {
   const [price, setPrice] = useState('');
   const [location, setLocation] = useState('');
   const [barcode, setBarcode] = useState('');
+  const [hasTester, setHasTester] = useState(false);
+  const [batchCode, setBatchCode] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const isAdmin = canEditBarcode(currentUser?.role);
@@ -36,6 +38,8 @@ export const ItemEditModal: React.FC = () => {
       setPrice(String(editingItem.price));
       setLocation(editingItem.location || '');
       setBarcode(cleanBarcodeDigits(editingItem.barcode));
+      setHasTester(Boolean(editingItem.hasTester));
+      setBatchCode(editingItem.batchCode || '');
       setError(null);
     }
   }, [editingItem]);
@@ -78,6 +82,8 @@ export const ItemEditModal: React.FC = () => {
       price: priceCheck.parsedPrice,
       location: location.trim(),
       barcode: finalBarcode,
+      hasTester,
+      batchCode: batchCode.trim().toUpperCase(),
     });
 
     setEditingItem(null);
@@ -201,6 +207,43 @@ export const ItemEditModal: React.FC = () => {
                 onChange={(e) => setLocation(e.target.value)}
                 className="w-full px-3 py-2 bg-white border border-[#e7e2d4] rounded-lg text-sm text-[#242119]"
               />
+            </div>
+          </div>
+
+          {/* Batch Code & Store Tester Display Status */}
+          <div className="grid grid-cols-2 gap-3 items-end">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-[#56534a] mb-1">
+                Batch Code
+              </label>
+              <input
+                type="text"
+                value={batchCode}
+                onChange={(e) => setBatchCode(e.target.value)}
+                placeholder="e.g. CH-8804"
+                className="w-full px-3 py-2 bg-white border border-[#e7e2d4] rounded-lg text-sm font-mono uppercase text-[#242119]"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-[#56534a] mb-1">
+                Counter Tester
+              </label>
+              <button
+                type="button"
+                onClick={() => setHasTester(!hasTester)}
+                className={`w-full px-3 py-2 rounded-lg border text-xs font-semibold flex items-center justify-between transition-colors ${
+                  hasTester
+                    ? 'bg-[#eef2ec] border-[#c9d8c5] text-[#57795c]'
+                    : 'bg-[#faf8f4] border-[#e7e2d4] text-[#56534a]'
+                }`}
+              >
+                <span className="flex items-center gap-1.5 truncate">
+                  <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">{hasTester ? 'Tester Active' : 'No Tester'}</span>
+                </span>
+                {hasTester && <Check className="w-3.5 h-3.5 shrink-0" />}
+              </button>
             </div>
           </div>
 

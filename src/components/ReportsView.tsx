@@ -2,25 +2,32 @@ import React, { useState, useMemo } from 'react';
 import {
   FileText,
   Download,
-  CheckSquare,
-  Square,
   FileSpreadsheet,
   Eye,
-  Package,
-  ReceiptText,
+  Calendar,
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import { useInventory } from '../context/InventoryContext.js';
+import {
+  filterSalesByPeriod,
+  getSalesPeriodLabel,
+  formatSaleItemsSummary,
+  getSystemDateString,
+  type SalesReportPeriod,
+} from '../utils/inventoryLogic.js';
 import { PriceDisplay } from './PriceDisplay.js';
 
 export const ReportsView: React.FC = () => {
   const { items, sales, showToast, currency } = useInventory();
 
-  // Only 2 report options: Available & Total Stocks, and Purchase History
-  const [includeStocks, setIncludeStocks] = useState<boolean>(true);
-  const [includePurchaseHistory, setIncludePurchaseHistory] = useState<boolean>(true);
+  // Both Available & Total Stocks and Purchase History are always included
+  const includeStocks = true;
+  const includePurchaseHistory = true;
+
+  // Date filter for PDF and Spreadsheet reports: today, weekly, monthly, quarterly, all
+  const [salesPeriod, setSalesPeriod] = useState<SalesReportPeriod>('quarterly');
 
   const [fileFormat, setFileFormat] = useState<'pdf' | 'xlsx'>('pdf');
   const [activeSlide, setActiveSlide] = useState<number>(0);
@@ -34,13 +41,8 @@ export const ReportsView: React.FC = () => {
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const lastWheelSwipeRef = React.useRef<number>(0);
 
-  // Determine available slides based on checked report sections
-  const slides = useMemo(() => {
-    const list: Array<'stocks' | 'sales'> = [];
-    if (includeStocks) list.push('stocks');
-    if (includePurchaseHistory) list.push('sales');
-    return list;
-  }, [includeStocks, includePurchaseHistory]);
+  // Both slides are always available in the swipeable overview
+  const slides: Array<'stocks' | 'sales'> = ['stocks', 'sales'];
 
   const safeSlideIndex = Math.min(activeSlide, Math.max(0, slides.length - 1));
   const currentSlideType = slides[safeSlideIndex] || 'stocks';
@@ -155,26 +157,8 @@ export const ReportsView: React.FC = () => {
     }
   };
 
-  const toggleStocks = () => {
-    if (includeStocks && !includePurchaseHistory) {
-      showToast('At least one report option must remain checked');
-      return;
-    }
-    setIncludeStocks((prev) => !prev);
-    setActiveSlide(0);
-  };
-
-  const togglePurchaseHistory = () => {
-    if (includePurchaseHistory && !includeStocks) {
-      showToast('At least one report option must remain checked');
-      return;
-    }
-    setIncludePurchaseHistory((prev) => !prev);
-    setActiveSlide(0);
-  };
-
   // Computed metrics and sorted data
-  const dateStr = new Date().toISOString().slice(0, 10);
+  const dateStr = getSystemDateString();
   const formattedDate = new Date().toLocaleDateString('en-PH', {
     month: 'short',
     day: 'numeric',
@@ -185,13 +169,10 @@ export const ReportsView: React.FC = () => {
   const totalValuation = useMemo(() => items.reduce((s, i) => s + i.price * i.stock, 0), [items]);
 
   const sortedSales = useMemo(() => {
-    return [...sales].sort((a, b) => {
-      const timeA = new Date(a.date).getTime() || 0;
-      const timeB = new Date(b.date).getTime() || 0;
-      if (timeB !== timeA) return timeB - timeA;
-      return b.id.localeCompare(a.id);
-    });
-  }, [sales]);
+    return filterSalesByPeriod(sales, salesPeriod);
+  }, [sales, salesPeriod]);
+
+  const salesPeriodLabel = useMemo(() => getSalesPeriodLabel(salesPeriod), [salesPeriod]);
 
   const totalSalesRevenue = useMemo(
     () => sortedSales.reduce((sum, s) => sum + Number(s.amount || 0), 0),
@@ -273,8 +254,8 @@ export const ReportsView: React.FC = () => {
 
         if (includePurchaseHistory) {
           const salesPrefix = includeStocks
-            ? `Purchase History Transactions: ${sortedSales.length}  |  Total Sales: `
-            : `Date: ${formattedDate}  |  Transactions: ${sortedSales.length}  |  Total Sales: `;
+            ? `Sales Period: ${salesPeriodLabel}  |  Transactions: ${sortedSales.length}  |  Total Sales: `
+            : `Date: ${formattedDate}  |  Period: ${salesPeriodLabel}  |  Transactions: ${sortedSales.length}  |  Total Sales: `;
           doc.text(salesPrefix, 14, metaY);
           const salesPrefixWidth = doc.getTextWidth(salesPrefix);
           doc.addImage(whitePesoIcon, 'PNG', 14 + salesPrefixWidth, metaY - 3.2, 3.5, 3.5);
@@ -384,8 +365,8 @@ export const ReportsView: React.FC = () => {
           doc.setTextColor(36, 33, 25);
           doc.text(
             includeStocks
-              ? '2. PURCHASE HISTORY & TOTAL SALES'
-              : 'PURCHASE HISTORY & TOTAL SALES',
+              ? `2. PURCHASE HISTORY & TOTAL SALES (${salesPeriodLabel.toUpperCase()})`
+              : `PURCHASE HISTORY & TOTAL SALES (${salesPeriodLabel.toUpperCase()})`,
             14,
             currentStartY
           );
@@ -393,17 +374,17 @@ export const ReportsView: React.FC = () => {
           doc.setFont('helvetica', 'bold');
           doc.setFontSize(9);
           doc.setTextColor(92, 83, 62);
-          const totalSalesLabel = `Total Transactions: ${sortedSales.length}   |   Total Sales Revenue: `;
+          const totalSalesLabel = `Period: ${salesPeriodLabel}   |   Transactions: ${sortedSales.length}   |   Total Sales Revenue: `;
           doc.text(totalSalesLabel, 14, currentStartY + 5.5);
           const labelWidth = doc.getTextWidth(totalSalesLabel);
           doc.addImage(darkPesoIcon, 'PNG', 14 + labelWidth, currentStartY + 2.4, 3.4, 3.4);
           doc.text(salesFormatted, 14 + labelWidth + 3.8, currentStartY + 5.5);
 
-          const salesHeaders = ['Date', 'Client Name', 'Items / Purchase Notes', 'Amount (PHP)'];
+          const salesHeaders = ['Date', 'Client Name', 'Perfumes Purchased', 'Amount (PHP)'];
           const salesRows = sortedSales.map((s) => [
             s.date,
             s.name,
-            s.note || '—',
+            formatSaleItemsSummary(s, items),
             `     ${Number(s.amount || 0).toLocaleString('en-PH', {
               minimumFractionDigits: 2,
               maximumFractionDigits: 2,
@@ -499,6 +480,7 @@ export const ReportsView: React.FC = () => {
           combinedAoA.push(['Total Inventory Valuation (PHP ₱)', Number(totalValuation.toFixed(2))]);
         }
         if (includePurchaseHistory) {
+          combinedAoA.push(['Sales Date Period', salesPeriodLabel]);
           combinedAoA.push(['Total Sales Transactions', sortedSales.length]);
           combinedAoA.push(['Total Sales Revenue (PHP ₱)', Number(totalSalesRevenue.toFixed(2))]);
         }
@@ -538,14 +520,14 @@ export const ReportsView: React.FC = () => {
         }
 
         if (includePurchaseHistory) {
-          combinedAoA.push(['PURCHASE HISTORY & TOTAL SALES']);
-          combinedAoA.push(['Date', 'Client Name', 'Items / Purchase Notes', 'Amount (PHP ₱)']);
+          combinedAoA.push([`PURCHASE HISTORY & TOTAL SALES (${salesPeriodLabel.toUpperCase()})`]);
+          combinedAoA.push(['Date', 'Client Name', 'Perfumes Purchased', 'Amount (PHP ₱)']);
 
           sortedSales.forEach((s) => {
             combinedAoA.push([
               s.date,
               s.name,
-              s.note || '—',
+              formatSaleItemsSummary(s, items),
               Number(Number(s.amount || 0).toFixed(2)),
             ]);
           });
@@ -581,16 +563,17 @@ export const ReportsView: React.FC = () => {
         // If both are checked, also attach a dedicated Purchase History worksheet tab
         if (includeStocks && includePurchaseHistory) {
           const salesSheetAoA: any[][] = [
-            ['PURCHASE HISTORY & TOTAL SALES REPORT'],
+            [`PURCHASE HISTORY & TOTAL SALES REPORT (${salesPeriodLabel.toUpperCase()})`],
             ['Generated Date', dateStr],
+            ['Sales Date Period', salesPeriodLabel],
             ['Total Transactions', sortedSales.length],
             ['Total Sales (PHP ₱)', Number(totalSalesRevenue.toFixed(2))],
             [],
-            ['Date', 'Client Name', 'Items / Purchase Notes', 'Amount (PHP ₱)'],
+            ['Date', 'Client Name', 'Perfumes Purchased', 'Amount (PHP ₱)'],
             ...sortedSales.map((s) => [
               s.date,
               s.name,
-              s.note || '—',
+              formatSaleItemsSummary(s, items),
               Number(Number(s.amount || 0).toFixed(2)),
             ]),
             [],
@@ -621,72 +604,46 @@ export const ReportsView: React.FC = () => {
   };
 
   return (
-    <div className="space-y-4 max-w-4xl pb-20 md:pb-8">
+    <div className="space-y-3.5 sm:space-y-4 max-w-4xl pb-20 md:pb-8">
       <div>
-        <h2 className="text-2xl font-bold text-[#242119]">Inventory Reports</h2>
+        <h2 className="font-serif text-xl sm:text-2xl font-bold text-[#242119]">Inventory Reports</h2>
       </div>
 
       {/* Report Configuration & Generator Card */}
-      <div className="p-4 sm:p-5 bg-white border border-[#e7e2d4] rounded-2xl shadow-xs space-y-4">
-        <h3 className="text-sm sm:text-base font-bold text-[#242119]">
-          Select Report Sections
-        </h3>
-
-        {/* 2 Streamlined Options: Available & Total Stocks Only / Purchase History Only / Both */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
-          <button
-            type="button"
-            onClick={toggleStocks}
-            className={`flex items-center justify-between p-3 rounded-xl border text-left transition-all ${
-              includeStocks
-                ? 'border-[#9c8f6f] bg-[#faf8f4] text-[#1b1915] shadow-2xs'
-                : 'border-[#e7e2d4] bg-white text-[#8c8878] hover:bg-[#faf8f4]'
-            }`}
-          >
-            <div className="flex items-center gap-2.5 min-w-0">
-              {includeStocks ? (
-                <CheckSquare className="w-4 h-4 text-[#7c7156] shrink-0" />
-              ) : (
-                <Square className="w-4 h-4 text-[#c9c4b4] shrink-0" />
-              )}
-              <div className="truncate">
-                <div className="text-xs sm:text-sm font-bold text-[#242119]">
-                  Available &amp; Total Stocks
-                </div>
-                <div className="text-[11px] text-[#7c7156]">
-                  {items.length} SKUs · {totalUnits} total bottles
-                </div>
-              </div>
-            </div>
-            <Package className="w-4 h-4 text-[#9c8f6f] shrink-0 ml-2" />
-          </button>
-
-          <button
-            type="button"
-            onClick={togglePurchaseHistory}
-            className={`flex items-center justify-between p-3 rounded-xl border text-left transition-all ${
-              includePurchaseHistory
-                ? 'border-[#9c8f6f] bg-[#faf8f4] text-[#1b1915] shadow-2xs'
-                : 'border-[#e7e2d4] bg-white text-[#8c8878] hover:bg-[#faf8f4]'
-            }`}
-          >
-            <div className="flex items-center gap-2.5 min-w-0">
-              {includePurchaseHistory ? (
-                <CheckSquare className="w-4 h-4 text-[#7c7156] shrink-0" />
-              ) : (
-                <Square className="w-4 h-4 text-[#c9c4b4] shrink-0" />
-              )}
-              <div className="truncate">
-                <div className="text-xs sm:text-sm font-bold text-[#242119]">
-                  Purchase History
-                </div>
-                <div className="text-[11px] text-[#7c7156]">
-                  {sortedSales.length} sales · <PriceDisplay amount={totalSalesRevenue} symbol={currency} />
-                </div>
-              </div>
-            </div>
-            <ReceiptText className="w-4 h-4 text-[#9c8f6f] shrink-0 ml-2" />
-          </button>
+      <div className="p-3.5 sm:p-5 bg-white border border-[#e7e2d4] rounded-2xl shadow-xs space-y-3.5 sm:space-y-4">
+        {/* Date Option (Today, Weekly, Monthly, Quarterly, All Time) for PDF & Spreadsheet */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <label className="text-xs font-bold uppercase tracking-wider text-[#56534a] flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-[#7c7156]" />
+              <span>Date</span>
+            </label>
+            <span className="text-[11px] font-bold text-[#7c7156]">
+              {sortedSales.length} transactions · <PriceDisplay amount={totalSalesRevenue} symbol={currency} />
+            </span>
+          </div>
+          <div className="grid grid-cols-5 gap-1 p-1 bg-[#faf8f4] border border-[#e7e2d4] rounded-xl">
+            {[
+              { key: 'today' as const, label: 'Today' },
+              { key: 'weekly' as const, label: 'Weekly' },
+              { key: 'monthly' as const, label: 'Monthly' },
+              { key: 'quarterly' as const, label: 'Quarterly' },
+              { key: 'all' as const, label: 'All Time' },
+            ].map((option) => (
+              <button
+                key={option.key}
+                type="button"
+                onClick={() => setSalesPeriod(option.key)}
+                className={`py-2 px-0.5 sm:px-2.5 rounded-lg text-[10.5px] sm:text-xs font-bold tracking-tight sm:tracking-normal transition-all text-center whitespace-nowrap touch-manipulation ${
+                  salesPeriod === option.key
+                    ? 'bg-[#242119] text-white shadow-2xs'
+                    : 'text-[#56534a] hover:text-[#1b1915] hover:bg-white'
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Choose Export Format */}
@@ -852,6 +809,8 @@ export const ReportsView: React.FC = () => {
                         {includePurchaseHistory && (
                           <>
                             <span>|</span>
+                            <span>Period: {salesPeriodLabel}</span>
+                            <span>|</span>
                             <span>
                               Total Sales: <PriceDisplay amount={totalSalesRevenue} symbol={currency} />
                             </span>
@@ -924,8 +883,8 @@ export const ReportsView: React.FC = () => {
                         <div className="space-y-1.5">
                           <div className="text-[11px] font-bold text-[#242119] uppercase tracking-wider">
                             {includeStocks
-                              ? '2. PURCHASE HISTORY & TOTAL SALES (SWIPE RIGHT FOR STOCKS)'
-                              : 'PURCHASE HISTORY & TOTAL SALES'}
+                              ? `2. PURCHASE HISTORY & TOTAL SALES — ${salesPeriodLabel.toUpperCase()} (SWIPE RIGHT FOR STOCKS)`
+                              : `PURCHASE HISTORY & TOTAL SALES — ${salesPeriodLabel.toUpperCase()}`}
                           </div>
                           <div className="border border-[#e7e2d4] rounded-lg overflow-hidden">
                             <table className="w-full text-left text-[11px] sm:text-xs">
@@ -933,30 +892,38 @@ export const ReportsView: React.FC = () => {
                                 <tr className="bg-[#242119] text-white">
                                   <th className="py-1.5 px-2 sm:px-2.5">Date</th>
                                   <th className="py-1.5 px-2 sm:px-2.5">Client Name</th>
-                                  <th className="py-1.5 px-2 sm:px-2.5">Items / Notes</th>
+                                  <th className="py-1.5 px-2 sm:px-2.5">Perfumes Purchased</th>
                                   <th className="py-1.5 px-2 sm:px-2.5">Amount</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-[#e7e2d4]">
-                                {sortedSales.map((s, idx) => (
-                                  <tr
-                                    key={s.id}
-                                    className={idx % 2 === 1 ? 'bg-[#faf8f4]' : 'bg-white'}
-                                  >
-                                    <td className="py-1.5 px-2 sm:px-2.5 text-[#56534a] whitespace-nowrap">
-                                      {s.date}
-                                    </td>
-                                    <td className="py-1.5 px-2 sm:px-2.5 text-[#242119]">
-                                      {s.name}
-                                    </td>
-                                    <td className="py-1.5 px-2 sm:px-2.5 text-[#56534a]">
-                                      {s.note || '—'}
-                                    </td>
-                                    <td className="py-1.5 px-2 sm:px-2.5 text-[#242119] whitespace-nowrap">
-                                      <PriceDisplay amount={s.amount} symbol={currency} />
+                                {sortedSales.length === 0 ? (
+                                  <tr>
+                                    <td colSpan={4} className="py-4 text-center text-[#8c8878]">
+                                      No sales recorded for {salesPeriodLabel}.
                                     </td>
                                   </tr>
-                                ))}
+                                ) : (
+                                  sortedSales.map((s, idx) => (
+                                    <tr
+                                      key={s.id}
+                                      className={idx % 2 === 1 ? 'bg-[#faf8f4]' : 'bg-white'}
+                                    >
+                                      <td className="py-1.5 px-2 sm:px-2.5 text-[#56534a] whitespace-nowrap">
+                                        {s.date}
+                                      </td>
+                                      <td className="py-1.5 px-2 sm:px-2.5 text-[#242119]">
+                                        {s.name}
+                                      </td>
+                                      <td className="py-1.5 px-2 sm:px-2.5 text-[#56534a]">
+                                        {formatSaleItemsSummary(s, items)}
+                                      </td>
+                                      <td className="py-1.5 px-2 sm:px-2.5 text-[#242119] whitespace-nowrap">
+                                        <PriceDisplay amount={s.amount} symbol={currency} />
+                                      </td>
+                                    </tr>
+                                  ))
+                                )}
                               </tbody>
                               <tfoot>
                                 <tr className="bg-[#efeadc] text-[#242119] border-t-2 border-[#9c8f6f]">
@@ -1083,8 +1050,8 @@ export const ReportsView: React.FC = () => {
                               </td>
                               <td colSpan={4} className="py-1 px-2 sm:px-2.5 font-bold text-[#217346]">
                                 {includeStocks
-                                  ? '2. PURCHASE HISTORY & TOTAL SALES (SWIPE RIGHT FOR STOCKS)'
-                                  : 'PURCHASE HISTORY & TOTAL SALES'}
+                                  ? `2. PURCHASE HISTORY & TOTAL SALES — ${salesPeriodLabel.toUpperCase()} (SWIPE RIGHT FOR STOCKS)`
+                                  : `PURCHASE HISTORY & TOTAL SALES — ${salesPeriodLabel.toUpperCase()}`}
                               </td>
                             </tr>
                             <tr className="bg-[#242119] text-white">
@@ -1093,7 +1060,7 @@ export const ReportsView: React.FC = () => {
                               </td>
                               <td className="py-1 px-2 sm:px-2.5 border-r border-[#34302a]">Date</td>
                               <td className="py-1 px-2 sm:px-2.5 border-r border-[#34302a]">Client Name</td>
-                              <td className="py-1 px-2 sm:px-2.5 border-r border-[#34302a]">Items / Notes</td>
+                              <td className="py-1 px-2 sm:px-2.5 border-r border-[#34302a]">Perfumes Purchased</td>
                               <td className="py-1 px-2 sm:px-2.5">Amount</td>
                             </tr>
                             {sortedSales.map((s, idx) => (
@@ -1108,7 +1075,7 @@ export const ReportsView: React.FC = () => {
                                   {s.name}
                                 </td>
                                 <td className="py-1 px-2 sm:px-2.5 border-r border-[#e1dfdd]">
-                                  {s.note || '—'}
+                                  {formatSaleItemsSummary(s, items)}
                                 </td>
                                 <td className="py-1 px-2 sm:px-2.5 whitespace-nowrap">
                                   <PriceDisplay amount={s.amount} symbol={currency} />

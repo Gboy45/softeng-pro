@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import {
   Users,
   Shield,
@@ -10,8 +10,12 @@ import {
   Database,
   RefreshCw,
   Settings,
+  Download,
+  Upload,
 } from 'lucide-react';
 import { useInventory } from '../context/InventoryContext.js';
+import { computeCashierPerformance } from '../utils/inventoryLogic.js';
+import { PriceDisplay } from './PriceDisplay.js';
 
 export const AccountsView: React.FC = () => {
   const {
@@ -19,14 +23,25 @@ export const AccountsView: React.FC = () => {
     currentUser,
     logout,
     items,
+    sales,
+    stockLogs,
+    currency,
     lastSyncedAt,
     resetDemoData,
+    exportDatabaseBackup,
+    importDatabaseBackup,
     verifyPin,
     updatePin,
     showToast,
   } = useInventory();
 
   const isAdminAccount = currentUser?.role === 'admin';
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const cashierPerformance = useMemo(
+    () => computeCashierPerformance(sales, items),
+    [sales, items]
+  );
 
   // PIN management state (Admin only)
   const [currentPin, setCurrentPin] = useState('');
@@ -34,6 +49,23 @@ export const AccountsView: React.FC = () => {
   const [pinChangeOpen, setPinChangeOpen] = useState(false);
   const [pinMessage, setPinMessage] = useState<string | null>(null);
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
+
+  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const content = String(reader.result || '');
+      const res = importDatabaseBackup(content);
+      if (!res.success && res.error) {
+        showToast(res.error);
+      }
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    };
+    reader.readAsText(file);
+  };
 
   const handleUpdatePin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -100,13 +132,13 @@ export const AccountsView: React.FC = () => {
         </div>
       </div>
 
-      {/* Staff Roster Card */}
+      {/* Staff Roster & Sales Attribution Card */}
       <div className="bg-white border border-[#e7e2d4] rounded-2xl overflow-hidden shadow-xs">
         <div className="p-4 sm:p-5 border-b border-[#e7e2d4] bg-[#faf8f4] flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <Users className="w-4 h-4 text-[#8c826e]" />
             <h3 className="font-serif text-base font-bold text-[#1b1915]">
-              Accounts
+              Accounts &amp; Cashier Sales Performance
             </h3>
           </div>
           <span className="text-xs text-[#8c8878]">
@@ -117,6 +149,9 @@ export const AccountsView: React.FC = () => {
         <div className="divide-y divide-[#f0ece0]">
           {personnel.map((p) => {
             const isAdmin = p.username === 'ferdie';
+            const perf = isAdmin
+              ? cashierPerformance.Admin
+              : cashierPerformance.Associate;
             return (
               <div
                 key={p.id}
@@ -140,16 +175,23 @@ export const AccountsView: React.FC = () => {
                       @{p.username} · Role:{' '}
                       <strong className="text-[#1b1915]">
                         {isAdmin ? 'Admin' : 'Associate'}
-                      </strong>
+                      </strong>{' '}
+                      · Added {p.createdAt}
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 self-end sm:self-auto">
-                  <span className="text-xs text-[#8c8878]">
-                    Added: {p.createdAt}
-                  </span>
-                  <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-[#eef2ec] text-[#57795c] border border-[#d2dfcf]">
+                <div className="flex items-center justify-between sm:justify-end gap-4 pt-2 sm:pt-0 border-t sm:border-t-0 border-[#f0ece0]">
+                  <div className="text-left sm:text-right">
+                    <div className="font-serif font-bold text-sm text-[#1b1915] tabular-nums">
+                      <PriceDisplay amount={perf.revenue} symbol={currency} />
+                    </div>
+                    <div className="text-[11px] text-[#7c7156] tabular-nums">
+                      {perf.transactions} {perf.transactions === 1 ? 'sale' : 'sales'} ·{' '}
+                      {perf.bottlesSold} {perf.bottlesSold === 1 ? 'bottle' : 'bottles'} sold
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#57795c]">
                     {p.status}
                   </span>
                 </div>
@@ -243,22 +285,61 @@ export const AccountsView: React.FC = () => {
         )}
       </div>
 
-      {/* Storage & Reset Data */}
-      <div className="p-4 sm:p-5 bg-white border border-[#e7e2d4] rounded-2xl shadow-xs space-y-3">
-        <h3 className="font-serif text-base font-bold text-[#1b1915] flex items-center gap-2">
-          <Database className="w-4 h-4 text-[#7c7156]" />
-          Persistent Storage &amp; Cache
-        </h3>
+      {/* Storage, Database Backup & Restore, & Reset Data */}
+      <div className="p-4 sm:p-5 bg-white border border-[#e7e2d4] rounded-2xl shadow-xs space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="font-serif text-base font-bold text-[#1b1915] flex items-center gap-2">
+            <Database className="w-4 h-4 text-[#7c7156]" />
+            Database Backup &amp; Storage
+          </h3>
+          <span className="text-[11px] text-[#8c8878]">
+            Last Synced: {lastSyncedAt ? lastSyncedAt.toLocaleTimeString() : 'Just now'}
+          </span>
+        </div>
 
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1 text-xs">
-          <div className="space-y-1">
-            <span className="text-[#56534a] block">
-              Catalog: <strong className="text-[#1b1915]">{items.length} SKUs</strong> ({items.reduce((s, i) => s + i.stock, 0)} bottles)
+        <div className="p-3.5 bg-[#faf8f4] border border-[#e7e2d4] rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="space-y-0.5">
+            <span className="text-[#1b1915] font-bold block">
+              Shop Database Backup (.json)
             </span>
-            <span className="text-[#8c8878] block">
-              Last Synced: {lastSyncedAt ? lastSyncedAt.toLocaleTimeString() : 'Just now'}
+            <span className="text-[#56534a] block">
+              {items.length} fragrances ({items.reduce((s, i) => s + i.stock, 0)} bottles) ·{' '}
+              {sales.length} sales records · {stockLogs.length} stock logs
             </span>
           </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={exportDatabaseBackup}
+              className="px-3 py-2 text-xs font-semibold bg-[#1b1915] hover:bg-[#34302a] text-white rounded-xl flex items-center gap-1.5 transition-colors"
+            >
+              <Download className="w-3.5 h-3.5 text-[#efeadc]" />
+              <span>Export Backup</span>
+            </button>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json,application/json"
+              onChange={handleImportFile}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="px-3 py-2 text-xs font-semibold bg-white hover:bg-[#efeadc] text-[#1b1915] border border-[#e7e2d4] rounded-xl flex items-center gap-1.5 transition-colors"
+            >
+              <Upload className="w-3.5 h-3.5 text-[#7c7156]" />
+              <span>Restore Backup</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1 border-t border-[#f0ece0] text-xs">
+          <span className="text-[#8c8878]">
+            Reset inventory and sales to the default baseline catalog:
+          </span>
 
           {!confirmResetOpen ? (
             <button

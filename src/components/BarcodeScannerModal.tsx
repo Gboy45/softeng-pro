@@ -18,8 +18,10 @@ import {
   BarcodeFormat,
   DecodeHintType,
   HTMLCanvasElementLuminanceSource,
+  RGBLuminanceSource,
   BinaryBitmap,
   HybridBinarizer,
+  GlobalHistogramBinarizer,
 } from '@zxing/library';
 import { useInventory } from '../context/InventoryContext.js';
 import type { InventoryItem, ScanFlowStep } from '../types/inventory.js';
@@ -31,6 +33,9 @@ import {
   validateBarcode13Digits,
   formatCurrency,
   BARCODE_EXACT_LENGTH,
+  evaluateBarcodeConsensus,
+  enhanceBarcodeLuminance,
+  type BarcodeFrameSample,
 } from '../utils/inventoryLogic.js';
 import { lookupProductDetails, type LookupResult } from '../utils/lookup.js';
 
@@ -87,20 +92,18 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
   const scanLoopRef = useRef<any>(null);
   const isProcessingRef = useRef<boolean>(false);
   const ignoreUntilRef = useRef<number>(0);
+  const frameSamplesRef = useRef<BarcodeFrameSample[]>([]);
 
-  // ZXing reader instance setup with barcode formats & QR detection
+  // ZXing reader instance setup with retail barcode formats & QR detection
   const zxingReaderRef = useRef<MultiFormatReader | null>(null);
   const getZxingReader = () => {
     if (!zxingReaderRef.current) {
       const hints = new Map<DecodeHintType, any>();
       hints.set(DecodeHintType.POSSIBLE_FORMATS, [
         BarcodeFormat.EAN_13,
-        BarcodeFormat.EAN_8,
         BarcodeFormat.UPC_A,
-        BarcodeFormat.UPC_E,
         BarcodeFormat.CODE_128,
-        BarcodeFormat.CODE_39,
-        BarcodeFormat.ITF,
+        BarcodeFormat.EAN_8,
         BarcodeFormat.QR_CODE,
       ]);
       hints.set(DecodeHintType.TRY_HARDER, true);
@@ -113,6 +116,7 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
 
   // Reset and clean up
   const resetFlow = useCallback(() => {
+    frameSamplesRef.current = [];
     setStep('camera_active');
     setScannedCode('');
     setMatchedItem(null);
@@ -139,10 +143,12 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
       const cleanDigits = cleanBarcodeDigits(rawCode);
       if (!cleanDigits || isProcessingRef.current || Date.now() < ignoreUntilRef.current) return;
       isProcessingRef.current = true;
+      frameSamplesRef.current = [];
       setQrDetected(false);
 
-      setScannedCode(cleanDigits);
       const existing = findItemByBarcode(items, cleanDigits);
+      const canonical = existing ? cleanBarcodeDigits(existing.barcode) : cleanDigits;
+      setScannedCode(canonical);
 
       if (existing) {
         // CASE 1: Found in existing inventory -> Show how many to add popup
@@ -155,7 +161,7 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
         setStep('prompt_confirm_add_new');
 
         setIsLookingUp(true);
-        lookupProductDetails(cleanDigits).then((result: LookupResult | null) => {
+        lookupProductDetails(canonical).then((result: LookupResult | null) => {
           setIsLookingUp(false);
           if (result && result.fields) {
             setLookupInfo(`Online match found from ${result.source}`);
@@ -171,7 +177,7 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
     [items]
   );
 
-  // Decode frame using native BarcodeDetector or ZXing fallback
+  // Decode frame using multi-pass ZXing + adaptive luminance stretch
   const decodeVideoFrame = useCallback((): { isQr: boolean; text?: string } | null => {
     if (!videoRef.current || videoRef.current.readyState < 2 || !videoRef.current.videoWidth) {
       return null;
@@ -182,25 +188,52 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
       canvasRef.current = document.createElement('canvas');
     }
     const canvas = canvasRef.current;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+    const sx = Math.floor(vw * 0.08);
+    const sy = Math.floor(vh * 0.3);
+    const sw = Math.floor(vw * 0.84);
+    const sh = Math.floor(vh * 0.4);
+    canvas.width = sw;
+    canvas.height = sh;
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) return null;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
 
-    // 1. Try ZXing MultiFormatReader
+    const reader = getZxingReader();
     try {
-      const reader = getZxingReader();
       const luminanceSource = new HTMLCanvasElementLuminanceSource(canvas);
-      const binaryBitmap = new BinaryBitmap(new HybridBinarizer(luminanceSource));
-      const result = reader.decode(binaryBitmap);
+      for (const bin of [
+        new GlobalHistogramBinarizer(luminanceSource),
+        new HybridBinarizer(luminanceSource),
+      ]) {
+        try {
+          const result = reader.decode(new BinaryBitmap(bin));
+          if (result) {
+            const isQr = result.getBarcodeFormat() === BarcodeFormat.QR_CODE;
+            return { isQr, text: result.getText() };
+          }
+        } catch {
+          // Try next
+        } finally {
+          reader.reset();
+        }
+      }
 
+      // Adaptive luminance normalizer + 1D horizontal unsharp mask pass
+      const imgData = ctx.getImageData(0, 0, sw, sh);
+      const enhanced = enhanceBarcodeLuminance(imgData.data, sw, sh, true);
+      const rgbSource = new RGBLuminanceSource(enhanced, sw, sh);
+      const result = reader.decode(new BinaryBitmap(new GlobalHistogramBinarizer(rgbSource)));
       if (result) {
         const isQr = result.getBarcodeFormat() === BarcodeFormat.QR_CODE;
         return { isQr, text: result.getText() };
       }
     } catch {
-      // Nothing decoded in this frame with ZXing
+      // Nothing decoded in this frame
+    } finally {
+      reader.reset();
     }
 
     return null;
@@ -209,6 +242,7 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
   // Initialize camera stream
   const startCamera = useCallback(async () => {
     setCameraError(null);
+    frameSamplesRef.current = [];
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       setCameraError('Camera access is not supported. Use photo upload or manual entry below.');
       return;
@@ -220,7 +254,7 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
         audio: false,
       });
 
@@ -245,7 +279,7 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
     }
   }, []);
 
-  // Continuous Camera Scan Loop
+  // Continuous Camera Scan Loop with Multi-Frame Consensus Lock
   useEffect(() => {
     if (!isOpen) {
       stopCamera();
@@ -262,7 +296,7 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
 
     let lastTick = 0;
     const scanLoop = (time: number) => {
-      if (time - lastTick > 200) {
+      if (time - lastTick > 80) {
         lastTick = time;
         if (
           !isProcessingRef.current &&
@@ -270,12 +304,19 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
           Date.now() >= ignoreUntilRef.current
         ) {
           const hit = decodeVideoFrame();
+          const now = Date.now();
+          frameSamplesRef.current = frameSamplesRef.current.filter((s) => now - s.timestamp <= 950);
+
           if (hit) {
             if (hit.isQr) {
               setQrDetected(true);
             } else if (hit.text) {
               setQrDetected(false);
-              handleBarcodeDetected(hit.text);
+              frameSamplesRef.current.push({ code: hit.text, timestamp: now });
+              const consensus = evaluateBarcodeConsensus(frameSamplesRef.current, items, now, 950);
+              if (consensus.locked && consensus.code) {
+                handleBarcodeDetected(consensus.code);
+              }
             }
           }
         }
@@ -288,7 +329,7 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
     return () => {
       stopCamera();
     };
-  }, [isOpen, presetBarcode, startCamera, stopCamera, step, decodeVideoFrame, handleBarcodeDetected, resetFlow]);
+  }, [isOpen, presetBarcode, startCamera, stopCamera, step, decodeVideoFrame, handleBarcodeDetected, resetFlow, items]);
 
   // Handle Photo File Upload decoding
   const handlePhotoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
